@@ -1,0 +1,14 @@
+# Example: a world map window with the game's own map. One frame, "worldmap", which the mode shows and hides.
+api = 1
+name = "Example: a world map"
+version = "1"
+
+# preload: the page loads hidden at the join, so the window is there the moment the mode shows it.
+# focus "input": the mode may give it the mouse at once (it never asks for the keyboard).
+# events_out: the events the page sends the mode.
+[frames.worldmap]
+page = "worldmap/index.html"
+preload = true
+z = 300
+focus = "input"
+events_out = ["map.close", "map.click"]

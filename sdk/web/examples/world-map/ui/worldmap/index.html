@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>World map</title>
+<link rel="stylesheet" href="worldmap.css">
+</head>
+<body>
+<section id="window" aria-label="World map">
+  <header>
+    <h1 id="title">World map</h1>
+    <button id="back" type="button" hidden>Back to the region</button>
+    <button id="close" type="button" aria-label="Close">&times;</button>
+  </header>
+  <div id="view">
+    <div id="sheet">
+      <img id="map" alt="">
+      <div id="towns"></div>
+      <div id="markers"></div>
+    </div>
+    <p id="nomap" hidden>This level has no map.</p>
+  </div>
+  <footer>
+    <span id="where"></span>
+    <span class="hint">Click a town's outline to open its map. End or /worldmap closes the window.</span>
+  </footer>
+</section>
+<!-- The page SDK for opening this page in a browser (mock mode). In the game, the game's own SDK is already there and this copy steps aside. -->
+<script src="../sdk.js"></script>
+<script src="worldmap.js"></script>
+</body>
+</html>

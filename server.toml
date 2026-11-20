@@ -1,0 +1,31 @@
+# KCD:MP custom server configuration: feudalwars.
+
+[server]
+name = "Feudal Wars"
+motd = "Houses fight for the treasury. Declare war, pay upkeep, farm for the realm."
+port = 7777
+max_players = 32
+level = "klaster"
+
+[gamemode]
+script = "gamemodes/feudalwars.lua"
+watch = false
+
+[combat]
+respawn_seconds = 10
+loot_bodies = "all"
+
+[world]
+time = "07:30"
+time_ratio = 15.0
+weather = ""
+
+[commands]
+builtin = true
+public = ["help", "pos", "players", "items", "uptime", "house", "war", "money", "pay", "farm", "craft", "prestige", "taxes"]
+disabled = []
+
+[audit]
+enabled = true
+mode = "observe"
+action = "kick"
