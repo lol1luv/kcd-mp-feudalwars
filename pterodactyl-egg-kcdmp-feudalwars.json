@@ -15,7 +15,7 @@
     "file_denylist": [],
     "startup": "./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
     "config": {
-        "files": "{\n    \"server.toml\": {\n        \"parser\": \"toml\",\n        \"find\": {\n            \"server.port\": \"{{server.build.default.port}}\",\n            \"server.max_players\": \"{{env.MAX_PLAYERS}}\",\n            \"server.name\": \"{{env.SERVER_NAME}}\",\n            \"server.password\": \"{{env.SERVER_PASSWORD}}\"\n        }\n    }\n}",
+        "files": "{\n    \"server.toml\": {\n        \"parser\": \"toml\",\n        \"find\": {\n            \"server.port\": \"{{server.build.default.port}}\",\n            \"server.max_players\": \"{{env.MAX_PLAYERS}}\",\n            \"server.name\": \"{{env.SERVER_NAME}}\",\n            \"server.password\": \"{{env.SERVER_PASSWORD}}\",\n            \"server.level\": \"{{env.LEVEL}}\"\n        }\n    }\n}",
         "startup": "{\n    \"done\": \"[Server] Listening\",\n    \"userInteraction\": []\n}",
         "logs": "{\n    \"custom\": true,\n    \"location\": \"server.log\"\n}",
         "stop": "^C"
