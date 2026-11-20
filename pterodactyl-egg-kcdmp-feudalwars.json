@@ -6,10 +6,10 @@
     "author": "lol1luv@users.noreply.github.com",
     "description": "KCD:MP dedicated server running the Feudal Wars game mode (houses, wars, treasury, economy sinks).",
     "docker_images": {
-        ".NET 8": "ghcr.io/pterodactyl/yolks:dotnet_8"
+        "Debian": "ghcr.io/pterodactyl/yolks:debian"
     },
     "file_denylist": [],
-    "startup": "./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
+    "startup": "export DOTNET_ROOT=/mnt/server/dotnet; export PATH=$PATH:/mnt/server/dotnet; ./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
     "config": {
         "files": "{\n    \"server.toml\": {\n        \"parser\": \"toml\",\n        \"find\": {\n            \"server.port\": \"{{server.build.default.port}}\",\n            \"server.max_players\": \"{{env.MAX_PLAYERS}}\",\n            \"server.name\": \"{{env.SERVER_NAME}}\",\n            \"server.password\": \"{{env.SERVER_PASSWORD}}\",\n            \"server.level\": \"{{env.LEVEL}}\"\n        }\n    }\n}",
         "startup": "{\n    \"done\": \"[Server] Listening\",\n    \"userInteraction\": []\n}",
@@ -18,7 +18,7 @@
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\nset -e\napt-get update -y && apt-get install -y curl ca-certificates\ncd /mnt/server\nif [ ! -f server.toml ]; then cp server.toml.example server.toml; fi\nmkdir -p data gamemodes\nchmod +x KcdMp.Server 2>/dev/null || true\necho 'Installation finished. Upload KcdMp files or pull them from git.'\n",
+            "script": "#!/bin/bash\nset -e\napt-get update -y\ncd /mnt/server\n# .NET 8 runtime (needed by KcdMp.Server)\nif [ ! -d dotnet ]; then\n  curl -sSL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh\n  chmod +x dotnet-install.sh\n  ./dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir /mnt/server/dotnet\n  rm dotnet-install.sh\nfi\nif [ ! -f server.toml ]; then cp server.toml.example server.toml; fi\nmkdir -p data gamemodes\nchmod +x KcdMp.Server 2>/dev/null || true\necho 'export DOTNET_ROOT=/mnt/server/dotnet' >> /etc/environment.vnc 2>/dev/null || true\necho 'Installation finished. Upload KcdMp files or pull them from git.'\n",
             "container": "ghcr.io/pterodactyl/installers:debian",
             "entrypoint": "bash"
         }
