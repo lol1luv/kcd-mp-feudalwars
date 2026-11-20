@@ -1,0 +1,149 @@
+/* Feudal Wars UI: parchment and iron. Shared by every page. */
+
+:root {
+  --ink: #2b2118;
+  --parchment: #e8dcc0;
+  --parchment-dark: #d8c9a8;
+  --gold: #c9a227;
+  --blood: #7a1f1f;
+  --iron: #4a4a48;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  color: var(--ink);
+  background: transparent;
+  display: none;
+}
+
+body.ready { display: flex; align-items: center; justify-content: center; }
+
+.window {
+  width: min(860px, 92vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(160deg, var(--parchment) 0%, var(--parchment-dark) 100%);
+  border: 2px solid var(--iron);
+  border-radius: 6px;
+  box-shadow: 0 0 0 4px rgba(43, 33, 24, .25), 0 18px 50px rgba(0, 0, 0, .55);
+}
+
+.window > header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 2px solid var(--iron);
+  background: linear-gradient(180deg, #3a3a38, #2b2118);
+}
+
+.window h1 {
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: var(--gold);
+  font-weight: 600;
+  margin-right: auto;
+}
+
+nav { display: flex; gap: 6px; }
+
+nav button {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 14px;
+  color: var(--parchment);
+  background: transparent;
+  border: 1px solid #6b5d43;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+nav button[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+button.close {
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 10px;
+  color: var(--parchment);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+button.close:hover { color: var(--blood); }
+
+#body { padding: 18px 22px; overflow-y: auto; }
+
+dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; }
+
+dt { font-weight: 700; color: var(--blood); }
+
+dd { border-bottom: 1px dotted #a89a78; padding-bottom: 4px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #bfae8b; }
+
+th { color: var(--blood); font-variant: small-caps; letter-spacing: 1px; }
+
+tr.online td { color: var(--ink); }
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: var(--gold);
+  color: var(--ink);
+}
+
+.badge.war { background: var(--blood); color: var(--parchment); }
+
+button.act {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  margin-right: 6px;
+  color: var(--parchment);
+  background: var(--iron);
+  border: 1px solid #2b2118;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+button.act:hover { background: var(--blood); }
+
+button.act.gold { background: var(--gold); color: var(--ink); }
+
+input[type="text"], input[type="number"], select {
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 8px;
+  border: 1px solid var(--iron);
+  border-radius: 3px;
+  background: #f4ecd8;
+}
+
+#log {
+  height: 180px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  background: rgba(43, 33, 24, .07);
+  border: 1px solid #bfae8b;
+  border-radius: 3px;
+  padding: 8px 10px;
+}
+
+.lead { margin-bottom: 14px; font-style: italic; color: #5a4a30; }
+
+footer { padding: 10px 18px; border-top: 2px solid var(--iron); text-align: center; font-size: 12px; color: #6b5d43; }
