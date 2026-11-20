@@ -12,13 +12,13 @@
     "startup": "DOTNET_ROOT=/home/container/dotnet DOTNET_ROOT_X64=/home/container/dotnet ./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
     "config": {
         "files": "{\n    \"server.toml\": {\n        \"parser\": \"toml\",\n        \"find\": {\n            \"server.port\": \"{{server.build.default.port}}\",\n            \"server.max_players\": \"{{env.MAX_PLAYERS}}\",\n            \"server.name\": \"{{env.SERVER_NAME}}\",\n            \"server.password\": \"{{env.SERVER_PASSWORD}}\",\n            \"server.level\": \"{{env.LEVEL}}\"\n        }\n    }\n}",
-        "startup": "{\n    \"done\": \"[Server] Listening\",\n    \"userInteraction\": []\n}",
+        "startup": "{\n    \"done\": \"starting\",\n    \"userInteraction\": []\n}",
         "logs": "{\n    \"custom\": false,\n    \"location\": \"server.log\"\n}",
         "stop": "^^C"
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\nset -e\napt-get update -y\ncd /mnt/server\n# .NET 8 runtime (needed by KcdMp.Server)\nif [ ! -d dotnet ]; then\n  curl -sSL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh\n  chmod +x dotnet-install.sh\n  ./dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir /mnt/server/dotnet\n  rm dotnet-install.sh\nfi\nif [ ! -f server.toml ]; then cp server.toml.example server.toml; fi\nmkdir -p data gamemodes\nchmod +x KcdMp.Server 2>/dev/null || true\necho 'export DOTNET_ROOT=/mnt/server/dotnet' >> /etc/environment.vnc 2>/dev/null || true\necho 'Installation finished. Upload KcdMp files or pull them from git.'\n",
+            "script": "#!/bin/bash\nset -e\ncd /mnt/server\n\n# /tmp inside the container is a tiny tmpfs: keep temp files on disk\nmkdir -p /mnt/server/tmp\nexport TMPDIR=/mnt/server/tmp\nexport TMP=/mnt/server/tmp\nexport TEMP=/mnt/server/tmp\n\n# .NET 10 runtime (app host version 10.0.12)\nif [ ! -f /mnt/server/dotnet/dotnet ]; then\n  curl -sSLf https://dot.net/v1/dotnet-install.sh -o /mnt/server/tmp/dotnet-install.sh\n  chmod +x /mnt/server/tmp/dotnet-install.sh\n  /mnt/server/tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir /mnt/server/dotnet\nfi\n\n# server files (from the repo's first commit, which ships the binaries)\nif [ ! -f KcdMp.Server ]; then\n  echo \"Downloading server files...\"\n  curl -sSLf https://github.com/lol1luv/kcd-mp-feudalwars/archive/6449f75.tar.gz -o /mnt/server/tmp/src.tar.gz\n  mkdir -p /mnt/server/tmp/src\n  tar xzf /mnt/server/tmp/src.tar.gz -C /mnt/server/tmp/src\n  SRC_DIR=$(find /mnt/server/tmp/src -mindepth 1 -maxdepth 1 -type d | head -1)\n  cp -rn \"$SRC_DIR\"/. /mnt/server/\n  rm -rf /mnt/server/tmp/src\nfi\n\nif [ ! -f server.toml ]; then cp server.toml.example server.toml; fi\nmkdir -p data gamemodes\nchmod +x KcdMp.Server\nrm -rf /mnt/server/tmp\necho 'Installation finished.'\n",
             "container": "ghcr.io/pterodactyl/installers:debian",
             "entrypoint": "bash"
         }
