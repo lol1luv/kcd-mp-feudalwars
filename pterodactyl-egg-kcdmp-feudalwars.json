@@ -6,7 +6,7 @@
     "author": "lol1luv@users.noreply.github.com",
     "description": "KCD:MP dedicated server running the Feudal Wars game mode (houses, wars, treasury, economy sinks).",
     "docker_images": {
-        "Debian": "ghcr.io/pterodactyl/yolks:debian"
+        "Ubuntu 24.04": "ubuntu:24.04"
     },
     "file_denylist": [],
     "startup": "DOTNET_ROOT=/home/container/dotnet DOTNET_ROOT_X64=/home/container/dotnet ./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
