@@ -18,7 +18,7 @@
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\nset -e\napt-get update -y && apt-get install -y curl unzip ca-certificates\ncd /mnt/server\nif [ ! -f server.toml ]; then cp server.toml.example server.toml; fi\nmkdir -p data gamemodes\necho 'Installation finished. Upload KcdMp files or pull them from git.'\n",
+            "script": "#!/bin/bash\nset -e\napt-get update -y && apt-get install -y curl ca-certificates\ncd /mnt/server\nif [ ! -f server.toml ]; then cp server.toml.example server.toml; fi\nmkdir -p data gamemodes\nchmod +x KcdMp.Server 2>/dev/null || true\necho 'Installation finished. Upload KcdMp files or pull them from git.'\n",
             "container": "ghcr.io/pterodactyl/installers:debian",
             "entrypoint": "bash"
         }
