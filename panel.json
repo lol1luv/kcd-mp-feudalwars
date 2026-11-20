@@ -1,0 +1,45 @@
+{
+  "schema_version": "1",
+  "name": "KCD:MP Feudal Wars Server",
+  "uid": "kcd-mp-feudalwars",
+  "description": "KCD:MP server with feudal wars, houses, economy and wars system",
+  "start_command": "KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
+  "server_type": "kcdmp",
+  "category": "game",
+  "logo": "https://docs.kcd-mp.com/_astro/emblem.DgF7_6fM.png",
+  "visibility": "public",
+  "default_map": "klaster",
+  "query_port": 7777,
+  "query_enabled": true,
+  "commands": {
+    "query": {
+      "port": 7777,
+      "timeout": 5
+    }
+  },
+  "features": {
+    "query": true,
+    "rcon": false,
+    "ftp": false,
+    "backup": false
+  },
+  "limits": {
+    "core": 2,
+    "ram": 2048,
+    "disk": 1024
+  },
+  "path": "/home/kcdmp/server",
+  "environment": {
+    "KCDMP_CONFIG": "server.toml",
+    "KCDMP_GAMEMODE": "gamemodes/feudalwars.lua"
+  },
+  "ports": [
+    {
+      "port": 7777,
+      "protocol": "udp",
+      "on_start": true
+    }
+  ],
+  "panel_color": "#8B4513",
+  "category_color": "#8B4513"
+}
