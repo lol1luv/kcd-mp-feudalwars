@@ -12,7 +12,7 @@
     "startup": "DOTNET_ROOT=/home/container/dotnet DOTNET_ROOT_X64=/home/container/dotnet ./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
     "config": {
         "files": "{\n    \"server.toml\": {\n        \"parser\": \"toml\",\n        \"find\": {\n            \"server.port\": \"{{server.build.default.port}}\",\n            \"server.max_players\": \"{{env.MAX_PLAYERS}}\",\n            \"server.name\": \"{{env.SERVER_NAME}}\",\n            \"server.password\": \"{{env.SERVER_PASSWORD}}\",\n            \"server.level\": \"{{env.LEVEL}}\"\n        }\n    }\n}",
-        "startup": "{\n    \"done\": \"starting\",\n    \"userInteraction\": []\n}",
+        "startup": "{\n    \"done\": \"listening on udp\",\n    \"userInteraction\": []\n}",
         "logs": "{\n    \"custom\": false,\n    \"location\": \"server.log\"\n}",
         "stop": "^^C"
     },
