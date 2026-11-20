@@ -1,0 +1,68 @@
+{
+    "_comment": "Pterodactyl egg (PTDL_v2) for the KCD:MP server with the Feudal Wars game mode. Import: Admin -> Nests -> Import Egg.",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-11-20T00:00:00+03:00",
+    "name": "KCD:MP Feudal Wars",
+    "author": "lol1luv",
+    "description": "KCD:MP dedicated server running the Feudal Wars game mode (houses, wars, treasury, economy sinks).",
+    "features": null,
+    "docker_images": {
+        "Ubuntu 22.04 (.NET runtime)": "ghcr.io/pterodactyl/yolks:ubuntu"
+    },
+    "file_denylist": [],
+    "startup": "./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua",
+    "config": {
+        "files": "{\n    \"server.toml\": {\n        \"parser\": \"toml\",\n        \"find\": {\n            \"server.port\": \"{{server.build.default.port}}\",\n            \"server.max_players\": \"{{env.MAX_PLAYERS}}\",\n            \"server.name\": \"{{env.SERVER_NAME}}\",\n            \"server.password\": \"{{env.SERVER_PASSWORD}}\"\n        }\n    }\n}",
+        "startup": "{\n    \"done\": \"[Server] Listening\",\n    \"userInteraction\": []\n}",
+        "logs": "{\n    \"custom\": true,\n    \"location\": \"server.log\"\n}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\nset -e\napt-get update -y && apt-get install -y curl unzip ca-certificates\ncd /mnt/server\nif [ ! -f server.toml ]; then cp server.toml.example server.toml; fi\nmkdir -p data gamemodes\necho 'Installation finished. Upload KcdMp files or pull them from git.'\n",
+            "container": "ghcr.io/pterodactyl/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Server Name",
+            "description": "Name shown in the server browser.",
+            "env_variable": "SERVER_NAME",
+            "default_value": "KCD:MP Feudal Wars",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:64"
+        },
+        {
+            "name": "Max Players",
+            "description": "Maximum players on the server.",
+            "env_variable": "MAX_PLAYERS",
+            "default_value": "32",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,128"
+        },
+        {
+            "name": "Server Password",
+            "description": "Empty = open server.",
+            "env_variable": "SERVER_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:64"
+        },
+        {
+            "name": "Level",
+            "description": "Map level: klaster, trosecko or kutnohorsko.",
+            "env_variable": "LEVEL",
+            "default_value": "klaster",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:klaster,trosecko,kutnohorsko"
+        }
+    ]
+}

@@ -1,0 +1,21 @@
+# Server state and logs (created at runtime)
+server.db
+server.log
+server.log.1
+*.log
+data/server.db
+data/server.db-*
+data/maps/
+
+# Data exported from the game (large, rebuilt with tools/)
+data/heightmaps/
+data/navmesh/
+data/collision/
+data/combat/
+
+# Editor and OS files
+.kilo/
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
