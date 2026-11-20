@@ -1,14 +1,10 @@
 {
-    "_comment": "Pterodactyl egg (PTDL_v2) for the KCD:MP server with the Feudal Wars game mode. Import: Admin -> Nests -> Import Egg.",
     "meta": {
-        "version": "PTDL_v2",
-        "update_url": null
+        "version": "PTDL_v2"
     },
-    "exported_at": "2026-11-20T00:00:00+03:00",
     "name": "KCD:MP Feudal Wars",
-    "author": "lol1luv",
+    "author": "lol1luv@users.noreply.github.com",
     "description": "KCD:MP dedicated server running the Feudal Wars game mode (houses, wars, treasury, economy sinks).",
-    "features": null,
     "docker_images": {
         "Ubuntu 22.04 (.NET runtime)": "ghcr.io/pterodactyl/yolks:ubuntu"
     },
@@ -18,7 +14,7 @@
         "files": "{\n    \"server.toml\": {\n        \"parser\": \"toml\",\n        \"find\": {\n            \"server.port\": \"{{server.build.default.port}}\",\n            \"server.max_players\": \"{{env.MAX_PLAYERS}}\",\n            \"server.name\": \"{{env.SERVER_NAME}}\",\n            \"server.password\": \"{{env.SERVER_PASSWORD}}\",\n            \"server.level\": \"{{env.LEVEL}}\"\n        }\n    }\n}",
         "startup": "{\n    \"done\": \"[Server] Listening\",\n    \"userInteraction\": []\n}",
         "logs": "{\n    \"custom\": true,\n    \"location\": \"server.log\"\n}",
-        "stop": "^C"
+        "stop": "^^C"
     },
     "scripts": {
         "installation": {
