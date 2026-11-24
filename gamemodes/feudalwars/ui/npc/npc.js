@@ -1,11 +1,19 @@
-// NPC constructor (admins). from the mode: {lang, npcs:[{id,name,role,role_label,x,y,stock}], items:[{item,label,price}]}
-//   to the mode: npc.close, npc.remove {id}, npc.stock {id, item, price}
+// NPC page. Two modes:
+//   single: {mode:"single", npc:{id,name,role,role_label,stock:[{label,price}]}, actions:[{id,label}]}
+//   admin:  {npcs:[...], items:[...]}
+//   to the mode: npc.close, npc.action {id, npc}, npc.remove {id}, npc.stock {id,item,price}
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const L = {
-    en: { title: "People of the realm", lead: "Place a vendor, a trainer or a guard where you stand: /npc add <role> <name>. Pick their stock here.", name: "Name", role: "Role", place: "Where", stock: "Goods", remove: "Remove", stockH: "Goods of the vendor", stockLead: "Click a good to put it on the counter at a fair price.", empty: "No people placed yet — stand where you want one and use /npc add vendor <name>." },
-    ru: { title: "Люди королевства", lead: "Поставь торговца, учителя или стражника там, где стоишь: /npc add <роль> <имя>. Товар выбери здесь.", name: "Имя", role: "Роль", place: "Где", stock: "Товар", remove: "Убрать", stockH: "Товары торговца", stockLead: "Нажми товар, чтобы выставить его на прилавок по честной цене.", empty: "Пока никого нет — встань, где нужен человек, и введи /npc add vendor <имя>." },
+    en: { title: "People of the realm", lead: "Place a vendor, a trainer or a guard where you stand: /npc add <role> <name>. Pick their stock here.",
+      name: "Name", role: "Role", place: "Where", stock: "Goods", remove: "Remove", stockH: "Goods of the vendor",
+      stockLead: "Click a good to put it on the counter at a fair price.", empty: "No people placed yet — stand where you want one and use /npc add vendor <name>.",
+      offers: "Offers", price: "Price", close: "Close" },
+    ru: { title: "Люди королевства", lead: "Поставь торговца, учителя или стражника там, где стоишь: /npc add <роль> <имя>. Товар выбери здесь.",
+      name: "Имя", role: "Роль", place: "Где", stock: "Товар", remove: "Убрать", stockH: "Товары торговца",
+      stockLead: "Нажми товар, чтобы выставить его на прилавок по честной цене.", empty: "Пока никого нет — встань, где нужен человек, и введи /npc add vendor <имя>.",
+      offers: "Предлагает", price: "Цена", close: "Закрыть" },
   };
 
   let state = null, selected = 0;
@@ -15,6 +23,51 @@
     document.body.classList.add("ready");
     state = data;
     const t = L[data.lang] || L.en;
+
+    if (data.mode === "single" && data.npc) {
+      renderSingle(data, t);
+      return;
+    }
+    renderAdmin(data, t);
+  });
+
+  function renderSingle(data, t) {
+    const n = data.npc;
+    $("title").textContent = n.name;
+    $("lead").textContent = n.role_label;
+    $("admin-block").hidden = true;
+    $("single-block").hidden = false;
+    $("single-role").textContent = n.role_label;
+
+    const acts = $("single-actions");
+    acts.replaceChildren();
+    for (const a of data.actions || []) {
+      const b = document.createElement("button");
+      b.className = "act gold big"; b.type = "button";
+      b.textContent = a.label;
+      b.addEventListener("click", () => KcdMp.emitServer("npc.action", { id: a.id, npc: n.id }));
+      acts.append(b);
+    }
+
+    const stock = $("single-stock");
+    stock.replaceChildren();
+    if ((n.stock || []).length) {
+      $("single-stock-h").hidden = false;
+      for (const row of n.stock) {
+        const tr = document.createElement("tr");
+        const td1 = document.createElement("td"); td1.textContent = row.label;
+        const td2 = document.createElement("td"); td2.textContent = Number(row.price).toLocaleString();
+        tr.append(td1, td2);
+        stock.append(tr);
+      }
+    } else {
+      $("single-stock-h").hidden = true;
+    }
+  }
+
+  function renderAdmin(data, t) {
+    $("single-block").hidden = true;
+    $("admin-block").hidden = false;
     $("title").textContent = t.title;
     $("lead").textContent = t.lead;
     $("th-name").textContent = t.name;
@@ -50,7 +103,7 @@
       tbody.append(tr);
     }
     renderStock();
-  });
+  }
 
   function renderStock() {
     if (!state) return;

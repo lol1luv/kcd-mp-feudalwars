@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="../feudalwars.css">
 </head>
 <body>
-<section class="window wide" aria-label="NPC constructor">
+<section class="window parchment" aria-label="NPC">
   <header>
     <div class="crest">👤</div>
     <h1 id="title">People of the realm</h1>
@@ -15,15 +15,23 @@
   <div id="body">
     <p class="lead" id="lead"></p>
 
-    <table id="npcs"><thead><tr><th>#</th><th id="th-name"></th><th id="th-role"></th><th id="th-place"></th><th id="th-stock"></th><th></th></tr></thead><tbody></tbody></table>
+    <div id="single-block" hidden>
+      <div class="seal-line"><span id="single-role"></span></div>
+      <div class="hero-buttons" id="single-actions"></div>
+      <h2 id="single-stock-h" hidden>Offers</h2>
+      <table id="single-stock"><tbody></tbody></table>
+    </div>
 
-    <h2 id="stock-h" hidden></h2>
-    <div id="stock-box" hidden>
-      <p class="lead" id="stock-lead"></p>
-      <div class="hero-buttons" id="item-buttons"></div>
+    <div id="admin-block">
+      <table id="npcs"><thead><tr><th>#</th><th id="th-name"></th><th id="th-role"></th><th id="th-place"></th><th id="th-stock"></th><th></th></tr></thead><tbody></tbody></table>
+      <h2 id="stock-h" hidden></h2>
+      <div id="stock-box" hidden>
+        <p class="lead" id="stock-lead"></p>
+        <div class="hero-buttons" id="item-buttons"></div>
+      </div>
     </div>
   </div>
-  <footer id="foot"></footer>
+  <footer>Feudal Wars &middot; Bohemia, 1403</footer>
 </section>
 <script src="npc.js"></script>
 </body>

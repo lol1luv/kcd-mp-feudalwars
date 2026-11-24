@@ -1697,6 +1697,8 @@ local function npc_spawn(n)
     return
   end
   n.actor = actor
+  -- the world's people are not for killing: no blow hurts them
+  pcall(SetActorInvulnerable, actor, true)
   local prompt = n.prompt
   if (not prompt or prompt == "") and n.role == "vendor" then prompt = "Trade" end
   if (not prompt or prompt == "") and n.role == "trainer" then prompt = "Train" end
@@ -1717,6 +1719,34 @@ local function npc_spawn(n)
   if n.role == "trainer" and n.data and n.data.skill then
     pcall(SetActorNameplateTitle, actor, npc_role_label("trainer", "en") .. ": " .. tostring(n.data.skill), 1.0, "0xE8C84AFF", "top")
   end
+end
+
+-- each NPC has its own page: what they are, what they offer, what you can do
+local function npc_open(pid, id)
+  local n = npcs[id]
+  if not n then return end
+  open_frame(pid, "npc")
+  local lang = lang_of(pid)
+  local actions = {}
+  if n.role == "vendor" then
+    actions[#actions + 1] = { id = "trade", label = { en = "Trade", ru = "Торговать" } }
+  elseif n.role == "trainer" then
+    actions[#actions + 1] = { id = "train", label = { en = "Train", ru = "Учиться" } }
+  elseif n.role == "guard" then
+    actions[#actions + 1] = { id = "report", label = { en = "Report a crime", ru = "Донести о преступлении" } }
+  elseif n.role == "quest" then
+    actions[#actions + 1] = { id = "task", label = { en = "Ask for work", ru = "Спросить работу" } }
+  end
+  local stock = {}
+  for _, row in ipairs((n.data and n.data.stock) or {}) do
+    local rdef = RES[tostring(row.item):gsub("^fw_", "")]
+    stock[#stock + 1] = { item = row.item, label = rdef and (rdef.name[lang] or rdef.name.en) or row.item, price = row.price }
+  end
+  SendPlayerWebMessage(pid, "npc", {
+    lang = lang, mode = "single",
+    npc = { id = n.id, name = n.name, role = n.role, role_label = npc_role_label(n.role, lang), stock = stock },
+    actions = actions,
+  })
 end
 
 npc_load_all = function()
@@ -2141,19 +2171,15 @@ function OnPlayerUseMapObject(pid, id)
 end
 
 -- the use key on an NPC: vendors open their shop (the engine does it), the rest
--- answer here. This is what makes the placed people clickable.
+-- open their own page. This is what makes the placed people clickable.
 function OnPlayerInteractActor(pid, id)
   for _, n in pairs(npcs) do
     if n.actor == id then
-      if n.role == "trainer" then
-        say(pid, fmt("%s может обучить тебя.", n.name), fmt("%s can train you.", n.name), COLOR_YELLOW)
-      elseif n.role == "guard" then
-        say(pid, "стражник кивает: «Проходи, путник».", "the guard nods: 'Move along, traveller'.", COLOR_YELLOW)
-      elseif n.role == "quest" then
-        say(pid, "«Работы хватает — спроси у бригадиров на промыслах».", "'There is work enough - ask the foremen at the sites'.", COLOR_YELLOW)
-      elseif n.role == "civilian" then
-        say(pid, "горожанин кивает.", "the citizen nods.", COLOR_SERVER)
+      if n.role == "vendor" then
+        -- the engine opens the trade screen; nothing to add
+        return
       end
+      npc_open(pid, n.id)
       return
     end
   end
@@ -2353,6 +2379,22 @@ local function web_event(pid, name, data)
     arch_open(pid)
   elseif name == "npc.close" then
     close_frame(pid, "npc")
+  elseif name == "npc.action" then
+    local id = math.floor(tonumber(data.npc) or 0)
+    local n = npcs[id]
+    local act = tostring(data.id or "")
+    if n then
+      if act == "trade" and n.shop then
+        close_frame(pid, "npc")
+        pcall(OpenShop, pid, n.shop, n.actor)
+      elseif act == "train" then
+        say(pid, fmt("%s готов учить тебя за плату.", n.name), fmt("%s will train you for coin.", n.name), COLOR_YELLOW)
+      elseif act == "report" then
+        say(pid, "стражник записывает твою жалобу.", "the guard writes down your complaint.", COLOR_YELLOW)
+      elseif act == "task" then
+        say(pid, "«Спроси работу у бригадиров на промыслах».", "'Ask the foremen at the work sites for a task'.", COLOR_YELLOW)
+      end
+    end
   elseif name == "craft.close" then
     close_frame(pid, "craft")
   elseif name == "craft.make" then
