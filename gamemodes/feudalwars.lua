@@ -34,33 +34,52 @@ local ECONOMY = {
 -- node pays per unit and raises the matching skill, which speeds up the work
 -- and raises the pay. Sites persist in the database (table jobs).
 
+-- Work = hit the vein with the right tool in your hands. No buttons are locked,
+-- no timers block combat: every swing on the vein's rock/tree/soil counts.
+-- E on the site only tells you what tool to hold and how the vein stands.
 local JOBS = {
   mine = {
     label = "the mine", skill = "mining", unit = "ore",
-    stock_max = 50, regrow_ms = 600000, work_ms = 8000,
-    pay = 6, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+    stock_max = 50, hits_per_unit = 5,
+    pay = 6, skill_pay_bonus = 1,
     icon = "troskyQuarry", icon_num = 48,
+    tools = { "pickaxe", "hammer", "normalHammer", "shovel" },
+    tool_names = "a pickaxe, hammer or shovel",
+    vein_mesh = "objects/natural/rocks/boulder_granite_a.cgf",
+    hit_effect = "collisions.rock_hit",
+    hit_sound = "special_blacksmith_hammer_anvil",
+    chunk_item = "stone",
     props = {
       "objects/manmade/common_furniture/barrels/barrel_a.cgf",
       "objects/manmade/common_furniture/crates/crate_box_a.cgf",
-      "objects/manmade/common_tools/shovel.cgf",
     },
   },
   farm = {
     label = "the field", skill = "farming", unit = "sheaf",
-    stock_max = 60, regrow_ms = 300000, work_ms = 6000,
-    pay = 5, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+    stock_max = 60, hits_per_unit = 3,
+    pay = 5, skill_pay_bonus = 1,
     icon = "miller", icon_num = 21,
+    tools = { "shovel", "hoe", "sickle", "scythe" },
+    tool_names = "a shovel, hoe or sickle",
+    vein_mesh = "objects/manmade/common_furniture/crates/crate_low_a.cgf",
+    hit_effect = "collisions.dirt_hit",
+    hit_sound = "special_digging",
+    chunk_item = "grain",
     props = {
       "objects/manmade/common_furniture/barrels/barrel_b.cgf",
-      "objects/manmade/common_furniture/crates/crate_low_a.cgf",
     },
   },
   forest = {
     label = "the logging camp", skill = "woodcutting", unit = "log",
-    stock_max = 40, regrow_ms = 450000, work_ms = 7000,
-    pay = 5, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+    stock_max = 40, hits_per_unit = 4,
+    pay = 5, skill_pay_bonus = 1,
     icon = "camp", icon_num = 38,
+    tools = { "lumberjack_axe", "axe", "woodaxe", "hatchet" },
+    tool_names = "a woodcutter's axe",
+    vein_mesh = "objects/natural/trees/oak/oak_trunk_a.cgf",
+    hit_effect = "collisions.wood_hit",
+    hit_sound = "special_wood_chop",
+    chunk_item = "wood",
     props = {
       "objects/manmade/common_furniture/crates/crate_box_b.cgf",
       "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
@@ -68,10 +87,10 @@ local JOBS = {
   },
 }
 
-local job_sites = {}    -- id -> { id, kind, x, y, z, stock, marker, mapicon, props = {ids}, interact }
-local job_work = {}     -- pid -> { site_id, ready_at }
+local job_sites = {}    -- id -> { id, kind, x, y, z, stock, hits, marker, mapicon, props = {ids}, vein, interact }
 local job_skills = {}    -- pid -> { mining = n, farming = n, woodcutting = n }
 local job_interactions = {} -- interaction id -> site id
+local job_hit_cd = {}   -- pid -> earliest next hit time (anti-macro)
 local build_preview = {}  -- pid -> { name, ids, timer }
 
 local function job_skill_of(pid, skill)
@@ -104,69 +123,94 @@ local function job_find_near(pid, kind)
   return best
 end
 
-local function job_work_start(pid, kind, site_id)
-  if job_work[pid] then
-    SendClientMessage(pid, COLOR_RED, "you are already working - wait for the shift to end.")
-    return
+-- what the player holds: right/left hand item classes + drawn weapon name
+local function job_tool_in_hands(pid)
+  local r, l = GetPlayerHandItems(pid)
+  local w = GetPlayerWeapon(pid)
+  return (r or "") .. " " .. (l or "") .. " " .. (w or "")
+end
+
+local function job_has_tool(pid, def)
+  local hands = job_tool_in_hands(pid):lower()
+  for _, t in ipairs(def.tools or {}) do
+    if hands:find(t:lower(), 1, true) then return true end
   end
+  return false
+end
+
+-- E on the site: no lock, no timer - just tells what to do
+local function job_work_start(pid, kind, site_id)
   local site = (site_id and job_sites[site_id]) or job_find_near(pid, kind)
   if not site then
     SendClientMessage(pid, COLOR_RED, fmt("no %s nearby - walk to %s.", JOBS[kind].label, JOBS[kind].label))
     return
   end
+  local def = JOBS[site.kind]
   if site.stock <= 0 then
-    SendClientMessage(pid, COLOR_RED, fmt("%s is exhausted - it regrows with time.", JOBS[kind].label))
+    SendClientMessage(pid, COLOR_RED, fmt("%s is exhausted - it regrows with time.", def.label))
     return
   end
-  local def = JOBS[kind]
   local skill = job_skill_of(pid, def.skill)
-  local work_ms = math.floor(def.work_ms * math.max(0.4, 1 - skill * def.skill_speed_bonus))
-  job_work[pid] = { site_id = site.id, ready_at = GetServerTime() + work_ms }
-  SendClientMessage(pid, COLOR_SERVER, fmt("you started a shift at %s (%d %s left). Back in %d seconds: /job done.",
-    def.label, site.stock, def.unit, math.floor(work_ms / 1000)))
-  SetTimer(function()
-    local w = job_work[pid]
-    if w and w.site_id == site.id then
-      SendClientMessage(pid, COLOR_YELLOW, fmt("your shift at %s is done: /job done to collect.", def.label))
-    end
-  end, work_ms, false)
+  SendClientMessage(pid, COLOR_YELLOW, fmt("%s: %d %s left. Hold %s and strike the %s - %d hits per %s. Your %s: %d.",
+    def.label, site.stock, def.unit, def.tool_names, site.kind == "mine" and "rock" or (site.kind == "forest" and "trunk" or "soil"),
+    def.hits_per_unit, def.unit, def.skill, skill))
 end
 
-local function job_work_collect(pid)
-  local w = job_work[pid]
-  if not w then
-    SendClientMessage(pid, COLOR_RED, "no shift in progress - /job <mine|farm|forest> to start.")
+-- a swing struck the level: if it hit our vein with the right tool, count it
+local function job_on_hit(pid, hit)
+  if not hit or not hit.x then return end
+  local now = GetServerTime()
+  if job_hit_cd[pid] and now < job_hit_cd[pid] then return end
+  job_hit_cd[pid] = now + 800
+  -- nearest vein within 4m of the hit point
+  local best, bestd = nil, 4.0
+  for _, site in pairs(job_sites) do
+    local dx, dy, dz = site.x - hit.x, site.y - hit.y, site.z - hit.z
+    local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if d < bestd then best, bestd = site, d end
+  end
+  if not best then return end
+  local def = JOBS[best.kind]
+  if best.stock <= 0 then
+    SendClientMessage(pid, COLOR_RED, fmt("%s is exhausted - it regrows with time.", def.label))
     return
   end
-  local site = job_sites[w.site_id]
-  if not site then job_work[pid] = nil return end
-  local def = JOBS[site.kind]
-  if GetServerTime() < w.ready_at then
-    local left = math.ceil((w.ready_at - GetServerTime()) / 1000)
-    SendClientMessage(pid, COLOR_RED, fmt("the shift is not done yet - %d seconds left.", left))
+  if not job_has_tool(pid, def) then
+    SendClientMessage(pid, COLOR_RED, fmt("you need %s in your hands to work %s.", def.tool_names, def.label))
     return
   end
-  job_work[pid] = nil
-  if site.stock <= 0 then
-    SendClientMessage(pid, COLOR_RED, fmt("%s ran dry while you worked.", def.label))
-    return
-  end
-  site.stock = site.stock - 1
-  if db then
-    db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = site.stock, i = site.id }, function() end)
-  end
-  local skill = job_skill_of(pid, def.skill)
-  local pay = def.pay + skill * def.skill_pay_bonus
-  local total_units = skill + 1
-  if total_units >= 10 and total_units % 10 == 0 then
-    local nl = job_skill_up(pid, def.skill)
-    SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d: faster shifts, +%d per unit.", def.skill, nl, def.skill_pay_bonus))
+  -- feedback: sparks/dust + sound at the hit point
+  pcall(SpawnEffect, def.hit_effect, hit.x, hit.y, hit.z, 1.0)
+  pcall(PlaySound, def.hit_sound, hit.x, hit.y, hit.z, 2)
+  best.hits = (best.hits or 0) + 1
+  local need = def.hits_per_unit or 5
+  if best.hits >= need then
+    best.hits = 0
+    best.stock = best.stock - 1
+    if db then
+      db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = best.stock, i = best.id }, function() end)
+    end
+    -- the rock bursts: a chunk pickup at your feet + pay
+    pcall(CreatePickup, def.chunk_item, hit.x, hit.y + 0.3, hit.z, 0, 0)
+    local skill = job_skill_of(pid, def.skill)
+    local pay = def.pay + skill * def.skill_pay_bonus
+    local total = skill + 1
+    if total >= 10 and total % 10 == 0 then
+      local nl = job_skill_up(pid, def.skill)
+      SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d: +%d per %s.", def.skill, nl, def.skill_pay_bonus, def.unit))
+    else
+      job_skill_up(pid, def.skill)
+    end
+    earn(pid, pay)
+    save_money(pid)
+    SendClientMessage(pid, COLOR_SERVER, fmt("+1 %s, +%d groschen (%s %d left).", def.unit, pay, def.label, best.stock))
+    if best.stock <= 0 then
+      SendClientMessage(pid, COLOR_YELLOW, fmt("%s is worked out - come back later.", def.label))
+      if best.vein then pcall(DestroyEntity, best.vein) best.vein = nil end
+    end
   else
-    job_skill_up(pid, def.skill)
+    SendClientMessage(pid, COLOR_SERVER, fmt("crack... (%d/%d)", best.hits, need))
   end
-  earn(pid, pay)
-  save_money(pid)
-  SendClientMessage(pid, COLOR_SERVER, fmt("+1 %s, +%d groschen (%s %d left).", def.unit, pay, def.label, site.stock))
 end
 
 local function job_status(pid)
@@ -175,16 +219,10 @@ local function job_status(pid)
     local site = job_find_near(pid, kind)
     local skill = job_skill_of(pid, def.skill)
     if site then
-      lines[#lines + 1] = fmt("%s: %d %s left, your %s %d", def.label, site.stock, def.unit, def.skill, skill)
+      lines[#lines + 1] = fmt("%s: %d %s left, hold %s, your %s %d", def.label, site.stock, def.unit, def.tool_names, def.skill, skill)
     else
-      lines[#lines + 1] = fmt("%s: walk closer to see the stock (your %s %d)", def.label, def.skill, skill)
+      lines[#lines + 1] = fmt("%s: walk closer (your %s %d)", def.label, def.skill, skill)
     end
-  end
-  if job_work[pid] then
-    local w = job_work[pid]
-    local site = job_sites[w.site_id]
-    local left = math.max(0, math.ceil((w.ready_at - GetServerTime()) / 1000))
-    lines[#lines + 1] = fmt("shift: %s, %d seconds left.", site and JOBS[site.kind].label or "?", left)
   end
   for _, l in ipairs(lines) do SendClientMessage(pid, COLOR_SERVER, l) end
 end
@@ -448,6 +486,13 @@ function OnGameModeInit()
     local iid, ierr = CreateMapIcon(site.x, site.y, site.z, opts)
     if iid then site.mapicon = iid
     else Log(fmt("feudalwars: map icon refused for %s: %s", site.id, tostring(ierr))) end
+    -- the vein itself: a rock / trunk / soil mound you strike with the tool
+    if site.vein then pcall(DestroyEntity, site.vein) site.vein = nil end
+    if site.stock > 0 and def.vein_mesh then
+      local v = CreateProp(def.vein_mesh, site.x, site.y, site.z, 0, 1.2, false, nil)
+      if v then site.vein = v
+      else Log(fmt("feudalwars: vein refused: %s", def.vein_mesh)) end
+    end
     -- physical props: crates, barrels, fireplace - the site looks like a work place
     for i, mesh in ipairs(def.props or {}) do
       local px = site.x + (i - 1) * 1.6 - 1.0
@@ -473,14 +518,19 @@ function OnGameModeInit()
   end
   for _, site in pairs(job_sites) do job_spawn_visual(site) end
 
-  -- regrow job stocks on a timer
+  -- regrow job stocks on a timer; a refilled vein rises again
   SetTimer(function()
     for _, site in pairs(job_sites) do
       local def = JOBS[site.kind]
       if def and site.stock < def.stock_max then
+        local was_empty = site.stock <= 0
         site.stock = math.min(def.stock_max, site.stock + math.max(1, math.floor(def.stock_max / 10)))
         if db then
           db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = site.stock, i = site.id }, function() end)
+        end
+        if was_empty and site.stock > 0 and def.vein_mesh and not site.vein then
+          local v = CreateProp(def.vein_mesh, site.x, site.y, site.z, 0, 1.2, false, nil)
+          if v then site.vein = v end
         end
       end
     end
@@ -493,9 +543,9 @@ function OnGameModeInit()
   SetShopItem(shop, "water", 3, -1)
   CreateVendor(shop, "provisioner", sx + 2.0, sy + 2.0, sz, syaw + 180.0, "Provisioner Bohush", nil, nil)
 
-  -- hotkeys: E = work where you stand, F = collect, F2 = main menu (F1 is the photo mode)
-  RegisterKeyBinding("fw.work", "Feudal Wars: start work here", "e")
-  RegisterKeyBinding("fw.done", "Feudal Wars: collect the shift", "f")
+  -- hotkeys: E = ask the site what to do, F2 = main menu (F1 is the photo mode).
+  -- Work itself is by weapon swings on the vein (OnPlayerHitScenery) - nothing is locked.
+  RegisterKeyBinding("fw.work", "Feudal Wars: ask the work site", "e")
   RegisterKeyBinding("fw.menu", "Feudal Wars: main menu", "f2")
 
   -- upkeep and war expiry, once a minute
@@ -601,8 +651,7 @@ function OnPlayerSpawn(pid)
     SendClientMessage(pid, COLOR_SERVER, fmt("You serve the house of %s. Treasury: %d, prestige: %d.", name, h.treasury, h.prestige))
   end
   AddPlayerActionHint(pid, "fw-menu", "f2", "Main menu", { binding = "fw.menu" })
-  AddPlayerActionHint(pid, "fw-work", "e", "Work here", { binding = "fw.work" })
-  AddPlayerActionHint(pid, "fw-done", "f", "Collect shift", { binding = "fw.done" })
+  AddPlayerActionHint(pid, "fw-work", "e", "Ask about work", { binding = "fw.work" })
 end
 
 function OnPlayerDeath(pid, attacker)
@@ -759,17 +808,35 @@ RegisterCommand("job", function(pid, args)
   local verb = (args:match("^(%S*)") or ""):lower()
   if verb == "mine" or verb == "farm" or verb == "forest" then
     job_work_start(pid, verb)
-  elseif verb == "done" then
-    job_work_collect(pid)
+  elseif verb == "kit" then
+    -- foreman's loan: a tool for the nearest site, into your hands
+    local px, py, pz = GetPlayerPos(pid)
+    local best, bestd = nil, 8.0
+    for _, site in pairs(job_sites) do
+      local dx, dy, dz = site.x - px, site.y - py, site.z - pz
+      local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+      if d < bestd then best, bestd = site, d end
+    end
+    if not best then
+      SendClientMessage(pid, COLOR_RED, "no work site here - walk to a marked site first.")
+      return
+    end
+    local def = JOBS[best.kind]
+    local tool = def.tools and def.tools[1]
+    if tool then
+      GivePlayerItem(pid, tool, 1)
+      SendClientMessage(pid, COLOR_YELLOW, fmt("the foreman lends you %s - take it in your hands and strike the %s.",
+        def.tool_names, best.kind == "mine" and "rock" or (best.kind == "forest" and "trunk" or "soil")))
+    end
   elseif verb == "skills" then
     local s = job_skills[pid] or {}
     SendClientMessage(pid, COLOR_SERVER, fmt("skills: mining %d, farming %d, woodcutting %d.",
       s.mining or 0, s.farming or 0, s.woodcutting or 0))
   else
     job_status(pid)
-    SendClientMessage(pid, COLOR_SERVER, "usage: /job [mine|farm|forest|done|skills]")
+    SendClientMessage(pid, COLOR_SERVER, "usage: /job [mine|farm|forest|kit|skills] - work by striking the vein with the tool in your hands")
   end
-end, { help = "work sites: mine, farm, forest", params = "[mine|farm|forest|done|skills]" })
+end, { help = "work sites: mine, farm, forest", params = "[mine|farm|forest|kit|skills]" })
 
 RegisterCommand("prestige", function(pid, args)
   local verb = args:match("^(%S*)"):lower()
@@ -1109,11 +1176,14 @@ function OnPlayerKeyBinding(pid, name, pressed)
     end
     if bestkind then job_work_start(pid, bestkind)
     else SendClientMessage(pid, COLOR_RED, "no work site here - walk to a marked site (/goto mine|farm|forest).") end
-  elseif name == "fw.done" then
-    job_work_collect(pid)
   elseif name == "fw.menu" then
     open_menu(pid)
   end
+end
+
+-- a swing struck the level: work veins live here, combat lives elsewhere - never blocked
+function OnPlayerHitScenery(pid, hit)
+  job_on_hit(pid, hit)
 end
 
 function OnPlayerUseMapObject(pid, id)
@@ -1139,7 +1209,7 @@ end
 function OnPlayerDisconnect(pid, reason)
   build_cancel(pid, true)
   save_money(pid)
-  job_work[pid] = nil
+  job_hit_cd[pid] = nil
   job_skills[pid] = nil
   local name = playerHouse[pid]
   if name and houses[name] then houses[name].members[GetPlayerName(pid):lower()] = nil end
