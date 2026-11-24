@@ -43,10 +43,9 @@
 - [x] Кросс-чек всех вызовов мода против `sdk/KcdMp.d.lua` — чисто (кроме SQL-ключей KEY/VALUES/VARCHAR).
 
 ## 5. Не выполнено / следующие шаги
-- [ ] Reimport egg в админке (из-за смены дефолта LEVEL).
-- [ ] Поменять Startup `LEVEL=kutnohorsko` на сервере `16e44d50`, Restart, проверить лог `KcdMp.Server 0.51.1 (protocol 126)` + `feudalwars on kutnohorsko`.
-- [ ] Проверить в игре: маркеры работ на компасе, иконки на карте (M), `/help`, `/goto mine`, `/job mine` → `/job done`, `/build list` → `/build place tent`, `/editor` (админ).
-- [ ] ВАЖНО: карта меняется только через Startup `LEVEL=kutnohorsko` + Restart. Из Lua сменить карту нельзя. Если после рестарта всё ещё klaster — смотреть лог: `feudalwars on <level>`.
+- [x] Карта сменилась на Куттенберг (подтверждено юзером 2026-11-24). Reimport + LEVEL=kutnohorsko + Restart сработали.
+- [ ] Проверить в игре: маркеры работ на компасе, иконки на карте (M), F2 меню, E работа / F сбор, `/goto mine`, `/job mine` → `/job done`, `/build list` → `/build place tent`, `/editor` (админ).
+- [ ] ВАЖНО: карта меняется только через Startup `LEVEL=kutnohorsko` + Restart. Из Lua сменить карту нельзя.
 - [ ] Если маркеров/иконок нет — смотреть лог: `feudalwars: map folder=...`, `marker refused`, `no map icon type`, `map icon refused`. Возможные причины: нет карты на сервере (readOnly), нет типа иконки на уровне (fallback на pin), игрок смотрит не туда.
 - [ ] `/editor` требует веб-слой в игре (server interfaces в опциях лаунчера). Без него — сообщение в чат. Это требование движка, не баг мода.
 - [ ] Следующий модуль по промту: лавки игроков (`CreateShop` + найм NPC-продавца). Ждёт команды «делай лавки».
