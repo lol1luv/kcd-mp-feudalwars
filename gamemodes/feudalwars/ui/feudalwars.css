@@ -1,12 +1,15 @@
-/* Feudal Wars UI: parchment and iron. Shared by every page. */
+/* Feudal Wars UI: wax seal, parchment and iron. Shared by every page.
+   KCD-like: dark iron header, gold titles, parchment body, blood accents. */
 
 :root {
   --ink: #2b2118;
   --parchment: #e8dcc0;
-  --parchment-dark: #d8c9a8;
+  --parchment-dark: #d3c29c;
   --gold: #c9a227;
+  --gold-hi: #e8c84a;
   --blood: #7a1f1f;
-  --iron: #4a4a48;
+  --iron: #3a3a38;
+  --iron-deep: #211a12;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -27,28 +30,65 @@ body.ready { display: flex; align-items: center; justify-content: center; }
   max-height: 88vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(160deg, var(--parchment) 0%, var(--parchment-dark) 100%);
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(201, 162, 39, .12), transparent 55%),
+    linear-gradient(160deg, var(--parchment) 0%, var(--parchment-dark) 100%);
   border: 2px solid var(--iron);
+  border-top: 3px solid var(--gold);
   border-radius: 6px;
-  box-shadow: 0 0 0 4px rgba(43, 33, 24, .25), 0 18px 50px rgba(0, 0, 0, .55);
+  box-shadow: 0 0 0 4px rgba(20, 14, 8, .45), 0 18px 50px rgba(0, 0, 0, .6);
 }
 
 .window > header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   padding: 12px 18px;
-  border-bottom: 2px solid var(--iron);
-  background: linear-gradient(180deg, #3a3a38, #2b2118);
+  border-bottom: 2px solid var(--gold);
+  background: linear-gradient(180deg, #45453f 0%, var(--iron-deep) 100%);
 }
 
 .window h1 {
-  font-size: 22px;
-  letter-spacing: 2px;
-  color: var(--gold);
-  font-weight: 600;
+  font-size: 24px;
+  letter-spacing: 3px;
+  font-variant: small-caps;
+  color: var(--gold-hi);
+  text-shadow: 0 2px 0 #000, 0 0 18px rgba(201, 162, 39, .35);
+  font-weight: 700;
   margin-right: auto;
 }
+
+.crest {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--gold-hi);
+  background: radial-gradient(circle, var(--blood) 0%, #4a1212 70%);
+  border: 2px solid var(--gold);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(201, 162, 39, .4);
+}
+
+.window h2 {
+  font-size: 18px;
+  letter-spacing: 2px;
+  font-variant: small-caps;
+  color: var(--blood);
+  margin: 6px 0 10px;
+}
+
+.hero-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+
+button.act.big { font-size: 15px; padding: 9px 18px; letter-spacing: 1px; }
+
+button.act.small { font-size: 12px; padding: 3px 10px; }
+
+.cmd { font-size: 12px; color: #6b5d43; font-family: Consolas, monospace; }
+
+.menu table td:first-child b { font-size: 15px; }
 
 nav { display: flex; gap: 6px; }
 

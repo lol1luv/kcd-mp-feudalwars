@@ -747,29 +747,99 @@ RegisterCommand("prestige", function(pid, args)
   end
 end, { help = "the house's standing", params = "[info|raise]" })
 
--- ---------------------------------------------------------------- help menu
+-- ---------------------------------------------------------------- help menu + language
+
+local LANGS = { en = true, ru = true }
+local player_lang = {}    -- pid -> "en" | "ru"
+
+local STR = {
+  en = {
+    menu_title = "Feudal Wars",
+    menu_keys = "Keys: E work where you stand, F collect the shift, F2 this menu, Esc close.",
+    menu_mouse = "If the mouse is stuck in the look-around, press the button:",
+    btn_mouse = "Free the mouse",
+    btn_me = "My character",
+    btn_hall = "House hall",
+    btn_admin = "Crown's console",
+    btn_settings = "Settings",
+    col_cmd = "Command",
+    col_what = "What it does",
+    btn_open = "Open",
+    settings_title = "Settings",
+    settings_lang = "Language",
+    settings_back = "Back",
+    lang_saved = "Language: English.",
+  },
+  ru = {
+    menu_title = "Феодальные войны",
+    menu_keys = "Клавиши: E работать, F забрать смену, F2 это меню, Esc закрыть.",
+    menu_mouse = "Если мышь застряла в обзоре, нажми кнопку:",
+    btn_mouse = "Освободить мышь",
+    btn_me = "Мой персонаж",
+    btn_hall = "Зал дома",
+    btn_admin = "Королевский совет",
+    btn_settings = "Настройки",
+    col_cmd = "Команда",
+    col_what = "Что делает",
+    btn_open = "Открыть",
+    settings_title = "Настройки",
+    settings_lang = "Язык",
+    settings_back = "Назад",
+    lang_saved = "Язык: русский.",
+  },
+}
 
 local HELP_MENU = {
-  { cmd = "/me", desc = "your character: purse, house, standing (opens the page)" },
-  { cmd = "/hall", desc = "the house hall: roster, treasury, wars (opens the page)" },
-  { cmd = "/house create|join|leave|list|info", desc = "found, join or leave a house" },
-  { cmd = "/war declare|peace|status", desc = "declare wars, sue for peace, check the score" },
-  { cmd = "/job mine|farm|forest|done|skills", desc = "work at the marked sites: mine, field, logging camp" },
-  { cmd = "/goto mine|farm|forest|spawn", desc = "walk to a work site (teleport)" },
-  { cmd = "/money", desc = "count your groschen" },
-  { cmd = "/pay <player> <amount>", desc = "pay another player (5% tax to your house)" },
-  { cmd = "/prestige info|raise", desc = "the house's standing" },
-  { cmd = "/build list|place|cancel", desc = "raise a ready structure from the catalogue" },
-  { cmd = "/editor", desc = "open the map editor (admins): place meshes by hand" },
-  { cmd = "/admin", desc = "open the crown's console (admins)" },
+  { cmd = "/me", title = { en = "My character", ru = "Мой персонаж" }, desc = { en = "purse, house, standing", ru = "кошель, дом, положение" } },
+  { cmd = "/hall", title = { en = "House hall", ru = "Зал дома" }, desc = { en = "roster, treasury, wars", ru = "люди, казна, войны" } },
+  { cmd = "/house", title = { en = "House", ru = "Дом" }, desc = { en = "create | join | leave | list | info", ru = "создать | вступить | уйти | список | сведения" } },
+  { cmd = "/war", title = { en = "War", ru = "Война" }, desc = { en = "declare | peace | status", ru = "объявить | мир | счёт" } },
+  { cmd = "/job", title = { en = "Work", ru = "Работа" }, desc = { en = "mine | farm | forest | done | skills", ru = "шахта | поле | лес | забрать | навыки" } },
+  { cmd = "/goto", title = { en = "Go to", ru = "Идти к" }, desc = { en = "mine | farm | forest | spawn", ru = "шахта | поле | лес | площадь" } },
+  { cmd = "/money", title = { en = "Purse", ru = "Кошелёк" }, desc = { en = "count your groschen", ru = "сколько грошей" } },
+  { cmd = "/pay", title = { en = "Pay", ru = "Заплатить" }, desc = { en = "<player> <amount> (5% tax)", ru = "<игрок> <сумма> (налог 5%)" } },
+  { cmd = "/prestige", title = { en = "Prestige", ru = "Престиж" }, desc = { en = "info | raise", ru = "сведения | поднять" } },
+  { cmd = "/build", title = { en = "Build", ru = "Стройка" }, desc = { en = "list | place | cancel", ru = "список | построить | снести" } },
+  { cmd = "/editor", title = { en = "Map editor (admins)", ru = "Редактор карты (админы)" }, desc = { en = "place meshes by hand", ru = "ставить объекты вручную" } },
+  { cmd = "/admin", title = { en = "Crown's console (admins)", ru = "Совет короны (админы)" }, desc = { en = "players, kick, ban, money", ru = "игроки, кик, бан, деньги" } },
 }
+
+local function lang_of(pid) return player_lang[pid] or "en" end
+local function T(pid, key) return (STR[lang_of(pid)] or STR.en)[key] or key end
 
 local function open_menu(pid)
   open_frame(pid, "menu")
+  local lang = lang_of(pid)
   local cmds = {}
-  for _, h in ipairs(HELP_MENU) do cmds[#cmds + 1] = { cmd = h.cmd, desc = h.desc } end
-  SendPlayerWebMessage(pid, "menu", { commands = cmds })
+  for _, h in ipairs(HELP_MENU) do
+    cmds[#cmds + 1] = { cmd = h.cmd, title = h.title[lang] or h.title.en, desc = h.desc[lang] or h.desc.en }
+  end
+  local s = STR[lang] or STR.en
+  SendPlayerWebMessage(pid, "menu", {
+    commands = cmds, lang = lang,
+    title = s.menu_title, keys = s.menu_keys, mouse = s.menu_mouse,
+    btn_mouse = s.btn_mouse, btn_me = s.btn_me, btn_hall = s.btn_hall,
+    btn_admin = s.btn_admin, btn_settings = s.btn_settings,
+    col_cmd = s.col_cmd, col_what = s.col_what, btn_open = s.btn_open,
+    settings_title = s.settings_title, settings_lang = s.settings_lang,
+    settings_back = s.settings_back,
+  })
 end
+
+RegisterCommand("lang", function(pid, args)
+  local l = (args:match("^(%S*)") or ""):lower()
+  if LANGS[l] then
+    player_lang[pid] = l
+    if db and accounts[pid] then
+      db:Execute("INSERT INTO players (name, money) VALUES (@n, @m) ON DUPLICATE KEY UPDATE money = money",
+        { n = accounts[pid].name, m = 0 }, function() end)
+    end
+    SendClientMessage(pid, COLOR_SERVER, STR[l].lang_saved)
+    open_menu(pid)
+  else
+    SendClientMessage(pid, COLOR_SERVER, "usage: /lang [en|ru]")
+  end
+end, { help = "language: en or ru", params = "[en|ru]" })
 
 RegisterCommand("help", function(pid)
   open_menu(pid)
@@ -982,20 +1052,6 @@ end
 
 -- UI frames talk via KcdMp.emitServer -> OnClientEvent (source = frame name).
 -- OnPlayerWebSurfaceEvent is only for in-world boards (CreateWebSurface), which we don't use.
-function OnClientEvent(pid, name, payload, source)
-  local data = {}
-  if payload and payload ~= "" then
-    if payload:sub(1, 1) == "{" then data = JsonDecode(payload) or {} end
-  end
-  web_event(pid, name, data)
-end
-
-function OnPlayerWebSurfaceEvent(pid, id, name, payload)
-  local data = {}
-  if payload and payload ~= "" then data = JsonDecode(payload) or {} end
-  web_event(pid, name, data)
-end
-
 local function close_frame(pid, frame)
   DestroyPlayerWebFrame(pid, frame)
   SetPlayerWebFocus(pid, frame, false, false)
@@ -1007,6 +1063,13 @@ local function web_event(pid, name, data)
   if name == "menu.cursor" then
     SetPlayerCursor(pid, true)
     SetPlayerWebFocus(pid, "menu", true, true)
+  elseif name == "menu.lang" then
+    local l = tostring(data.lang or ""):lower()
+    if LANGS[l] then
+      player_lang[pid] = l
+      SendClientMessage(pid, COLOR_SERVER, STR[l].lang_saved)
+      open_menu(pid)
+    end
   elseif name == "menu.close" then
     close_frame(pid, "menu")
   elseif name == "menu.run" then
@@ -1099,4 +1162,18 @@ local function web_event(pid, name, data)
       SetPlayerPos(pid, x + 1, y, z, yaw)
     end
   end
+end
+
+function OnClientEvent(pid, name, payload, source)
+  local data = {}
+  if payload and payload ~= "" then
+    if payload:sub(1, 1) == "{" then data = JsonDecode(payload) or {} end
+  end
+  web_event(pid, name, data)
+end
+
+function OnPlayerWebSurfaceEvent(pid, id, name, payload)
+  local data = {}
+  if payload and payload ~= "" then data = JsonDecode(payload) or {} end
+  web_event(pid, name, data)
 end

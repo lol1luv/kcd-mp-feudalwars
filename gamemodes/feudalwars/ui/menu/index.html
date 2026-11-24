@@ -6,22 +6,33 @@
 <link rel="stylesheet" href="../feudalwars.css">
 </head>
 <body>
-<section class="window" aria-label="Commands">
+<section class="window menu" aria-label="Menu">
   <header>
-    <h1>Feudal Wars</h1>
+    <div class="crest">⚔</div>
+    <h1 id="title">Feudal Wars</h1>
     <button class="close" id="close" type="button" aria-label="Close">&times;</button>
   </header>
   <div id="body">
-    <p class="lead">Keys: E work where you stand, F collect the shift, F2 this menu, Esc close. If the mouse is stuck in the look-around, press the button:</p>
-    <div style="margin-bottom:12px">
-      <button class="act" id="cursor" type="button">Free the mouse</button>
+    <p class="lead" id="keys"></p>
+    <p class="lead" id="mouse-line"><span id="mouse-text"></span> <button class="act small" id="cursor" type="button"></button></p>
+    <div class="hero-buttons">
+      <button class="act gold big" id="go-me" type="button"></button>
+      <button class="act gold big" id="go-hall" type="button"></button>
+      <button class="act gold big" id="go-admin" type="button"></button>
+      <button class="act big" id="go-settings" type="button"></button>
     </div>
-    <div style="margin-bottom:12px">
-      <button class="act gold" id="go-me" type="button">Character (F2)</button>
-      <button class="act gold" id="go-hall" type="button">House hall</button>
-      <button class="act gold" id="go-admin" type="button">Crown's console</button>
+    <div id="panel-main">
+      <table id="cmds"><thead><tr><th id="th-cmd"></th><th id="th-what"></th><th></th></tr></thead><tbody></tbody></table>
     </div>
-    <table id="cmds"><thead><tr><th>Command</th><th>What it does</th><th></th></tr></thead><tbody></tbody></table>
+    <div id="panel-settings" hidden>
+      <h2 id="settings-title"></h2>
+      <p class="lead" id="settings-lang-label"></p>
+      <div class="hero-buttons">
+        <button class="act gold big" id="lang-en" type="button">English</button>
+        <button class="act gold big" id="lang-ru" type="button">Русский</button>
+      </div>
+      <div style="margin-top:12px"><button class="act" id="settings-back" type="button"></button></div>
+    </div>
   </div>
   <footer>Feudal Wars &middot; Bohemia, 1403</footer>
 </section>
