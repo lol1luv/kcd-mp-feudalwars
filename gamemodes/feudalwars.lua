@@ -448,13 +448,10 @@ function OnGameModeInit()
   SetShopItem(shop, "water", 3, -1)
   CreateVendor(shop, "provisioner", sx + 2.0, sy + 2.0, sz, syaw + 180.0, "Provisioner Bohush", nil, nil)
 
-  -- hotkeys: E = work where you stand, F = collect, F2/F3/F4 = me/hall/admin
+  -- hotkeys: E = work where you stand, F = collect, F2 = main menu (F1 is the photo mode)
   RegisterKeyBinding("fw.work", "Feudal Wars: start work here", "e")
   RegisterKeyBinding("fw.done", "Feudal Wars: collect the shift", "f")
-  RegisterKeyBinding("fw.menu", "Feudal Wars: command menu", "f1")
-  RegisterKeyBinding("fw.me", "Feudal Wars: character page", "f2")
-  RegisterKeyBinding("fw.hall", "Feudal Wars: house hall", "f3")
-  RegisterKeyBinding("fw.admin", "Feudal Wars: admin console", "f4")
+  RegisterKeyBinding("fw.menu", "Feudal Wars: main menu", "f2")
 
   -- upkeep and war expiry, once a minute
   SetTimer(function()
@@ -558,14 +555,9 @@ function OnPlayerSpawn(pid)
     local h = houses[name]
     SendClientMessage(pid, COLOR_SERVER, fmt("You serve the house of %s. Treasury: %d, prestige: %d.", name, h.treasury, h.prestige))
   end
-  AddPlayerActionHint(pid, "fw-menu", "f1", "Commands", { binding = "fw.menu" })
+  AddPlayerActionHint(pid, "fw-menu", "f2", "Main menu", { binding = "fw.menu" })
   AddPlayerActionHint(pid, "fw-work", "e", "Work here", { binding = "fw.work" })
   AddPlayerActionHint(pid, "fw-done", "f", "Collect shift", { binding = "fw.done" })
-  AddPlayerActionHint(pid, "fw-me", "f2", "Character", { binding = "fw.me" })
-  AddPlayerActionHint(pid, "fw-hall", "f3", "House hall", { binding = "fw.hall" })
-  if isAdmin(pid) then
-    AddPlayerActionHint(pid, "fw-admin", "f4", "Admin console", { binding = "fw.admin" })
-  end
 end
 
 function OnPlayerDeath(pid, attacker)
@@ -955,16 +947,6 @@ function OnPlayerKeyBinding(pid, name, pressed)
     job_work_collect(pid)
   elseif name == "fw.menu" then
     open_menu(pid)
-  elseif name == "fw.me" then
-    open_me(pid)
-  elseif name == "fw.hall" then
-    if not playerHouse[pid] then
-      SendClientMessage(pid, COLOR_RED, "you serve no lord - /house create <name> or /house join <name> first.")
-    else
-      open_hall(pid)
-    end
-  elseif name == "fw.admin" then
-    if isAdmin(pid) then open_admin(pid) end
   end
 end
 
