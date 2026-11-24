@@ -1,0 +1,56 @@
+#!/bin/bash
+# Feudal Wars starter: checks GitHub for updates, then launches the server.
+# Installed by the egg install script; refreshes itself from the repo too.
+set -u
+cd "$(dirname "$0")" || exit 1
+
+REPO="lol1luv/kcd-mp-feudalwars"
+
+mkdir -p tmp
+export TMPDIR="$PWD/tmp" TMP="$PWD/tmp" TEMP="$PWD/tmp"
+
+if [ "${AUTO_UPDATE:-1}" != "1" ]; then
+  echo "Auto-update off (AUTO_UPDATE=${AUTO_UPDATE:-1}), starting local build."
+else
+  echo "Checking for Feudal Wars updates..."
+  REMOTE_SHA=""
+  if command -v curl >/dev/null 2>&1; then
+    REMOTE_SHA="$(curl -sSL --max-time 15 "https://api.github.com/repos/$REPO/commits/main" 2>/dev/null | grep -oE '"sha": "[0-9a-f]{40}"' | head -1 | grep -oE '[0-9a-f]{40}')"
+  fi
+  LOCAL_SHA="$(cat .fw_version 2>/dev/null || echo "")"
+
+  if [ -z "$REMOTE_SHA" ]; then
+    echo "Update check skipped (GitHub unreachable), starting local build."
+  elif [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
+    echo "Up to date ($REMOTE_SHA)."
+  else
+    echo "Updating ${LOCAL_SHA:-none} -> $REMOTE_SHA ..."
+    UPDTMP="$PWD/tmp/update"
+    rm -rf "$UPDTMP"
+    mkdir -p "$UPDTMP"
+    if curl -sSLf --max-time 180 "https://github.com/$REPO/archive/$REMOTE_SHA.tar.gz" -o "$UPDTMP/src.tar.gz" \
+      && tar xzf "$UPDTMP/src.tar.gz" -C "$UPDTMP"; then
+      SRC_DIR="$(find "$UPDTMP" -mindepth 1 -maxdepth 1 -type d | head -1)"
+      cp -f "$SRC_DIR"/KcdMp.Server ./KcdMp.Server
+      cp -f "$SRC_DIR"/*.dll ./
+      cp -f "$SRC_DIR"/*.so ./
+      cp -f "$SRC_DIR"/KcdMp.Server.deps.json ./KcdMp.Server.deps.json
+      cp -f "$SRC_DIR"/KcdMp.Server.runtimeconfig.json ./KcdMp.Server.runtimeconfig.json
+      cp -f "$SRC_DIR"/server.toml.example ./server.toml.example
+      cp -f "$SRC_DIR"/pterodactyl-start.sh ./start.sh.new
+      mv -f ./start.sh.new ./start.sh
+      mkdir -p gamemodes
+      cp -f "$SRC_DIR"/gamemodes/feudalwars.lua ./gamemodes/feudalwars.lua
+      cp -rf "$SRC_DIR"/gamemodes/feudalwars ./gamemodes/
+      chmod +x KcdMp.Server start.sh
+      echo "$REMOTE_SHA" > .fw_version
+      echo "Updated to $REMOTE_SHA."
+    else
+      echo "WARNING: update download failed, starting local build."
+    fi
+    rm -rf "$UPDTMP"
+  fi
+fi
+
+export DOTNET_ROOT="$PWD/dotnet" DOTNET_ROOT_X64="$PWD/dotnet"
+exec ./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua
