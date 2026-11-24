@@ -71,6 +71,7 @@
 - `sdk/KcdMp.d.lua`: API (~13000 строк).
 
 ## 8. Лог изменений
+- 2026-11-24: реинсталл прошёл после Restart (Wings подхватил обновлённый egg). Карта/меню/фокус — проверять в игре: F2 меню, E/F работы, `feudalwars on kutnohorsko` в логе.
 - `a8a0c4e` (2026-11-24): egg install: `cp start.sh` перенесён ДО `rm -rf tmp/main` (скрипт копировался из уже удалённой папки → `cannot stat .../pterodactyl-start.sh`). Ошибка вылезла при реинсталле.
 - `e1db2fd` (2026-11-24): egg JSON: убран BOM (PowerShell записал файл с BOM, панельный json_decode с JSON_THROW_ON_ERROR его не принимает → Syntax error при реимпорте). Качать egg только кнопкой Download/GitHub Raw без пересохранения.
 - `e35c2bd` (2026-11-24): install-скрипт: дефолт `level` klaster→kutnohorsko; start.sh пишет диагностику LEVEL env + level до/после. Юзер: браузер показывает Sedletz Monastery после реимпорта + LEVEL=kutnohorsko + рестарта.
