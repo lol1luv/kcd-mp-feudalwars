@@ -52,65 +52,250 @@ local RES = {
 local JOBS = {
   mine = {
     label = "the mine", skill = "mining",
-    stock_max = 50, hits_per_unit = 5,
+    nodes = 4, node_hp = 5, node_label = "the ore vein",
     pay = 2, skill_pay_bonus = 1,
     icon = "troskyQuarry", icon_num = 48,
     tools = { "pickaxe", "hammer", "normalHammer", "shovel" },
     tool_names = "a pickaxe, hammer or shovel",
-    vein_mesh = "objects/natural/rocks/boulder_granite_a.cgf",
+    vein_mesh = "objects/natural/rocks/boulder_granite_a.cgf", vein_scale = 1.2,
     hit_effect = "collisions.rock_hit",
     hit_sound = "special_blacksmith_hammer_anvil",
     drops = { { res = "stone", w = 45 }, { res = "coal", w = 30 }, { res = "iron", w = 18 }, { res = "silver", w = 5 }, { res = "gold", w = 2 } },
-    props = {
-      "objects/manmade/common_furniture/barrels/barrel_a.cgf",
-      "objects/manmade/common_furniture/crates/crate_box_a.cgf",
-    },
   },
   farm = {
     label = "the field", skill = "farming",
-    stock_max = 60, hits_per_unit = 3,
+    nodes = 5, node_hp = 3, node_label = "the sheaf",
     pay = 2, skill_pay_bonus = 1,
     icon = "miller", icon_num = 21,
     tools = { "shovel", "hoe", "sickle", "scythe" },
     tool_names = "a shovel, hoe or sickle",
-    vein_mesh = "objects/manmade/common_furniture/crates/crate_low_a.cgf",
+    vein_mesh = "objects/manmade/common_furniture/crates/crate_low_a.cgf", vein_scale = 0.9,
     hit_effect = "collisions.dirt_hit",
     hit_sound = "special_digging",
     drops = { { res = "grain", w = 100 } },
-    props = {
-      "objects/manmade/common_furniture/barrels/barrel_b.cgf",
-    },
   },
   forest = {
     label = "the logging camp", skill = "woodcutting",
-    stock_max = 40, hits_per_unit = 4,
+    nodes = 4, node_hp = 4, node_label = "the trunk",
     pay = 2, skill_pay_bonus = 1,
     icon = "camp", icon_num = 38,
     tools = { "lumberjack_axe", "axe", "woodaxe", "hatchet" },
     tool_names = "a woodcutter's axe",
-    vein_mesh = "objects/natural/trees/oak/oak_trunk_a.cgf",
+    vein_mesh = "objects/natural/trees/oak/oak_trunk_a.cgf", vein_scale = 1.0,
     hit_effect = "collisions.wood_hit",
     hit_sound = "special_wood_chop",
     drops = { { res = "wood", w = 100 } },
-    props = {
-      "objects/manmade/common_furniture/crates/crate_box_b.cgf",
-      "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
-    },
   },
 }
 
-local job_sites = {}    -- id -> { id, kind, x, y, z, stock, hits, marker, mapicon, props = {ids}, vein, interact }
-local job_skills = {}    -- pid -> { mining = n, farming = n, woodcutting = n }
-local job_interactions = {} -- interaction id -> site id
-local job_hit_cd = {}   -- pid -> earliest next hit time (anti-macro)
-local build_preview = {}  -- pid -> { name, ids, timer }
+-- forward declarations (assigned further down; used by the node core above)
+local lang_of, arch_open, bp_load_all, close_frame, isAdmin
+local db, fmt, earn, save_money, job_skill_of, job_skill_up
 
-local function job_skill_of(pid, skill)
+-- ---------------------------------------------------------------- breakable objects
+-- One registry for every thing in the world that can be struck and breaks into
+-- resources: the works' veins and the rock pieces of a built blueprint. A node
+-- remembers where it stands, how much it holds, what it drops, and when it grows
+-- back. Nodes are rebuilt from the database on every boot, so their state survives.
+
+local nodes = {}          -- key -> node
+local node_by_entity = {} -- entity/map-object id -> node key
+local NODE_RESPAWN = 300  -- seconds before a worked-out node comes back
+
+local function node_hash(kind, x, y)
+  return fmt("%s_%d_%d", kind, math.floor(x), math.floor(y))
+end
+
+local function terrain_z(x, y, fallback)
+  local ok, h = pcall(GetTerrainHeight, x, y)
+  if ok and type(h) == "number" and h > -100 then return h end
+  ok, h = pcall(GetGroundZ, x, y, 200.0)
+  if ok and type(h) == "number" and h > -100 then return h end
+  return fallback or 0
+end
+
+local function node_persist(n)
+  if not db then return end
+  db:Execute("INSERT INTO fw_nodes (id, kind, x, y, z, hp, hp_max, res, respawn_at, mapid) " ..
+    "VALUES (@i, @k, @x, @y, @z, @h, @hm, @r, @ra, @m) " ..
+    "ON DUPLICATE KEY UPDATE kind=@k2, x=@x2, y=@y2, z=@z2, hp=@h2, hp_max=@hm2, res=@r2, respawn_at=@ra2, mapid=@m2",
+    { i = n.key, k = n.kind, x = n.x, y = n.y, z = n.z, h = n.hp, hm = n.hp_max, r = n.res, ra = n.respawn_at or 0, m = n.mapid or 0,
+      k2 = n.kind, x2 = n.x, y2 = n.y, z2 = n.z, h2 = n.hp, hm2 = n.hp_max, r2 = n.res, ra2 = n.respawn_at or 0, m2 = n.mapid or 0 },
+    function() end)
+end
+
+-- a node's visual: a prop (works) or a map object (built blueprint pieces)
+local function node_show(n)
+  if n.entity then return end
+  if n.is_map then
+    -- a blueprint piece: a real map object, recreated if it was broken
+    local id = CreateMapObject(n.mesh, n.x, n.y, n.z, { yaw = n.yaw or 0, scale = n.scale, persist = true, solid = true })
+    if id then
+      n.mapid = id
+      n.entity = id
+      node_by_entity[id] = n.key
+      node_persist(n)
+    end
+    return
+  end
+  if n.mesh then
+    local id = CreateProp(n.mesh, n.x, n.y, n.z, n.yaw or 0, n.scale or 1, false, nil)
+    if id then
+      n.entity = id
+      node_by_entity[id] = n.key
+      pcall(SetEntityPrompt, id, n.prompt or "Strike")
+    end
+  end
+end
+
+local function node_hide(n)
+  if not n.entity then return end
+  if n.is_map then
+    pcall(DeleteMapObject, n.entity)
+  else
+    pcall(DestroyEntity, n.entity)
+  end
+  node_by_entity[n.entity] = nil
+  n.entity = nil
+end
+
+local function node_break(n, pid)
+  n.hp = 0
+  n.respawn_at = GetServerTime() + NODE_RESPAWN * 1000
+  node_hide(n)
+  node_persist(n)
+  -- the lump falls where it stood, and the striker takes it
+  if pid then
+    local rdef = RES[n.res]
+    if rdef then
+      GivePlayerItem(pid, "fw_" .. n.res, n.yield or 1)
+      SendClientMessage(pid, COLOR_YELLOW, fmt("%s breaks apart - %d %s to your bag.",
+        n.label or "the stone", n.yield or 1, rdef.name[lang_of(pid)] or rdef.name.en))
+    end
+    local def = JOBS[n.kind]
+    if def then
+      local skill = job_skill_of(pid, def.skill)
+      local pay = def.pay + skill * def.skill_pay_bonus
+      local total = skill + 1
+      if total >= 10 and total % 10 == 0 then
+        local nl = job_skill_up(pid, def.skill)
+        SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d.", def.skill, nl))
+      else
+        job_skill_up(pid, def.skill)
+      end
+      earn(pid, pay)
+      save_money(pid)
+    end
+  end
+  if n.x then
+    pcall(SpawnEffect, "collisions.rock_hit", n.x, n.y, n.z, 1.4)
+    pcall(PlaySound, "special_rock_fall", n.x, n.y, n.z, 2)
+  end
+end
+
+local function node_damage(n, pid, amount)
+  if n.hp <= 0 then return end
+  n.hp = n.hp - amount
+  if n.hp <= 0 then node_break(n, pid) else node_persist(n) end
+end
+
+local function node_nearest(x, y, z, radius)
+  local best, bestd = nil, radius or 3.0
+  for _, n in pairs(nodes) do
+    if n.hp > 0 then
+      local dx, dy, dz = n.x - x, n.y - y, n.z - z
+      local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+      if d < bestd then best, bestd = n, d end
+    end
+  end
+  return best
+end
+
+local function node_define(spec)
+  local key = spec.key or node_hash(spec.kind or "node", spec.x, spec.y)
+  local n = nodes[key]
+  if n then
+    n.x, n.y, n.z = spec.x, spec.y, spec.z
+    n.mesh = spec.mesh or n.mesh
+    n.mapid = spec.mapid or n.mapid
+    return n
+  end
+  n = {
+    key = key, kind = spec.kind or "node", x = spec.x, y = spec.y, z = spec.z,
+    mesh = spec.mesh, scale = spec.scale or 1, yaw = spec.yaw or 0,
+    hp = spec.hp or 5, hp_max = spec.hp or 5, res = spec.res or "stone",
+    yield = spec.yield or 1, label = spec.label, prompt = spec.prompt,
+    mapid = spec.mapid, is_map = spec.is_map or false, respawn_at = spec.respawn_at or 0,
+  }
+  nodes[key] = n
+  node_show(n)
+  return n
+end
+
+-- define a node that already has its object in the world; do not spawn another
+local function node_define_noshow(spec)
+  local key = spec.key or node_hash(spec.kind or "node", spec.x, spec.y)
+  local n = nodes[key]
+  if n then return n end
+  n = {
+    key = key, kind = spec.kind or "node", x = spec.x, y = spec.y, z = spec.z,
+    mesh = spec.mesh, scale = spec.scale or 1, yaw = spec.yaw or 0,
+    hp = spec.hp or 5, hp_max = spec.hp or 5, res = spec.res or "stone",
+    yield = spec.yield or 1, label = spec.label, prompt = spec.prompt,
+    mapid = spec.mapid, is_map = spec.is_map or false, respawn_at = spec.respawn_at or 0,
+  }
+  nodes[key] = n
+  return n
+end
+
+local job_sites = {}    -- id -> { id, kind, x, y, z, stock, marker, mapicon }
+local job_skills = {}    -- pid -> { mining = n, farming = n, woodcutting = n }
+local job_hit_cd = {}   -- pid -> earliest next hit time (anti-macro)
+local arch_interaction, architect_npc = nil, nil   -- the builder's use point and actor
+local icon_types = {}   -- map icon type names the level knows, filled in init
+
+-- a site's compass marker and map icon
+local function site_show(site)
+  local def = JOBS[site.kind]
+  if not def then return end
+  if site.marker then pcall(DestroyMarker, site.marker) site.marker = nil end
+  if site.mapicon then pcall(DeleteMapIcon, site.mapicon) site.mapicon = nil end
+  local mid = CreateMarker(site.x, site.y, site.z + 1.0, MARKER_QUEST, 0, site.label or def.label)
+  if mid then site.marker = mid ShowMarkerForAll(mid) end
+  local opts
+  if def.icon and icon_types[def.icon] then
+    opts = { type = def.icon, name = site.label or def.label }
+  else
+    opts = { icon = def.icon_num or 0, name = site.label or def.label }
+  end
+  local iid = CreateMapIcon(site.x, site.y, site.z, opts)
+  if iid then site.mapicon = iid end
+end
+
+-- a site raises a handful of breakable nodes around its centre
+local function site_raise_nodes(site)
+  local def = JOBS[site.kind]
+  if not def then return end
+  local count = def.nodes or 4
+  for i = 1, count do
+    local ang = (i * 2 * math.pi / count)
+    local nx, ny = site.x + math.cos(ang) * 2.2, site.y + math.sin(ang) * 2.2
+    node_define({
+      key = node_hash(site.id .. "_" .. i, nx, ny),
+      kind = site.kind, x = nx, y = ny, z = terrain_z(nx, ny, site.z),
+      mesh = def.vein_mesh, scale = def.vein_scale or 1.2,
+      hp = def.node_hp or 4, res = job_roll_drop(def), yield = 1,
+      label = def.node_label or "the vein", prompt = "Strike (" .. (def.tool_names or "tool") .. ")",
+    })
+  end
+end
+
+job_skill_of = function(pid, skill)
   local s = job_skills[pid]
   return (s and s[skill]) or 0
 end
 
-local function job_skill_up(pid, skill)
+job_skill_up = function(pid, skill)
   job_skills[pid] = job_skills[pid] or {}
   local s = job_skills[pid]
   s[skill] = (s[skill] or 0) + 1
@@ -158,75 +343,43 @@ local function job_work_start(pid, kind, site_id)
     return
   end
   local def = JOBS[site.kind]
-  if site.stock <= 0 then
-    SendClientMessage(pid, COLOR_RED, fmt("%s is exhausted - it regrows with time.", def.label))
-    return
+  local standing = 0
+  for _, n in pairs(nodes) do
+    if n.kind == site.kind and n.hp > 0 then
+      local dx, dy = n.x - site.x, n.y - site.y
+      if dx * dx + dy * dy < 100 then standing = standing + 1 end
+    end
   end
   local skill = job_skill_of(pid, def.skill)
-  SendClientMessage(pid, COLOR_YELLOW, fmt("%s: %d %s left. Hold %s and strike the %s - %d hits per %s. Your %s: %d.",
-    def.label, site.stock, def.unit, def.tool_names, site.kind == "mine" and "rock" or (site.kind == "forest" and "trunk" or "soil"),
-    def.hits_per_unit, def.unit, def.skill, skill))
+  local what = site.kind == "mine" and "rocks" or (site.kind == "forest" and "trunks" or "sheaves")
+  if standing == 0 then
+    SendClientMessage(pid, COLOR_RED, fmt("%s is worked out - the %s grow back with time.", site.label or def.label, what))
+    return
+  end
+  SendClientMessage(pid, COLOR_YELLOW, fmt("%s: %d %s here. Hold %s and strike them. Your %s: %d.",
+    site.label or def.label, standing, what, def.tool_names, def.skill, skill))
 end
 
--- a swing struck the level: if it hit our vein with the right tool, count it
+-- a swing struck the level: work veins and blueprint rocks live here; combat is never blocked
 local function job_on_hit(pid, hit)
   if not hit or not hit.x then return end
   local now = GetServerTime()
   if job_hit_cd[pid] and now < job_hit_cd[pid] then return end
-  job_hit_cd[pid] = now + 800
-  -- nearest vein within 4m of the hit point
-  local best, bestd = nil, 4.0
-  for _, site in pairs(job_sites) do
-    local dx, dy, dz = site.x - hit.x, site.y - hit.y, site.z - hit.z
-    local d = math.sqrt(dx * dx + dy * dy + dz * dz)
-    if d < bestd then best, bestd = site, d end
-  end
-  if not best then return end
-  local def = JOBS[best.kind]
-  if best.stock <= 0 then
-    SendClientMessage(pid, COLOR_RED, fmt("%s is exhausted - it regrows with time.", def.label))
+  job_hit_cd[pid] = now + 700
+  local n = node_nearest(hit.x, hit.y, hit.z, 4.0)
+  if not n then return end
+  local def = JOBS[n.kind]
+  local tool_ok = true
+  if def and def.tools then tool_ok = job_has_tool(pid, def) end
+  if not tool_ok then
+    SendClientMessage(pid, COLOR_RED, fmt("you need %s in your hands.", def.tool_names))
     return
   end
-  if not job_has_tool(pid, def) then
-    SendClientMessage(pid, COLOR_RED, fmt("you need %s in your hands to work %s.", def.tool_names, def.label))
-    return
-  end
-  -- feedback: sparks/dust + sound at the hit point
-  pcall(SpawnEffect, def.hit_effect, hit.x, hit.y, hit.z, 1.0)
-  pcall(PlaySound, def.hit_sound, hit.x, hit.y, hit.z, 2)
-  best.hits = (best.hits or 0) + 1
-  local need = def.hits_per_unit or 5
-  if best.hits >= need then
-    best.hits = 0
-    best.stock = best.stock - 1
-    if db then
-      db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = best.stock, i = best.id }, function() end)
-    end
-    -- the vein bursts: a weighted resource drop into your bag + small wage
-    local drop = job_roll_drop(def)
-    local rdef = RES[drop]
-    if rdef then
-      GivePlayerItem(pid, "fw_" .. drop, 1)
-      SendClientMessage(pid, COLOR_YELLOW, fmt("a lump of %s breaks off.", rdef.name[lang_of(pid)] or rdef.name.en))
-    end
-    local skill = job_skill_of(pid, def.skill)
-    local pay = def.pay + skill * def.skill_pay_bonus
-    local total = skill + 1
-    if total >= 10 and total % 10 == 0 then
-      local nl = job_skill_up(pid, def.skill)
-      SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d: +%d wage.", def.skill, nl, def.skill_pay_bonus))
-    else
-      job_skill_up(pid, def.skill)
-    end
-    earn(pid, pay)
-    save_money(pid)
-    SendClientMessage(pid, COLOR_SERVER, fmt("+%d groschen wage (%s %d left).", pay, def.label, best.stock))
-    if best.stock <= 0 then
-      SendClientMessage(pid, COLOR_YELLOW, fmt("%s is worked out - come back later.", def.label))
-      if best.vein then pcall(DestroyEntity, best.vein) best.vein = nil end
-    end
-  else
-    SendClientMessage(pid, COLOR_SERVER, fmt("crack... (%d/%d)", best.hits, need))
+  pcall(SpawnEffect, (def and def.hit_effect) or "collisions.rock_hit", hit.x, hit.y, hit.z, 1.0)
+  pcall(PlaySound, (def and def.hit_sound) or "special_blacksmith_hammer_anvil", hit.x, hit.y, hit.z, 2)
+  node_damage(n, pid, 1)
+  if n.hp > 0 then
+    SendClientMessage(pid, COLOR_SERVER, fmt("crack... (%d/%d)", n.hp_max - n.hp, n.hp_max))
   end
 end
 
@@ -243,14 +396,23 @@ function job_roll_drop(def)
 end
 
 local function job_status(pid)
+  local px, py, pz = GetPlayerPos(pid)
   local lines = {}
-  for kind, def in pairs(JOBS) do
-    local site = job_find_near(pid, kind)
-    local skill = job_skill_of(pid, def.skill)
-    if site then
-      lines[#lines + 1] = fmt("%s: %d %s left, hold %s, your %s %d", def.label, site.stock, def.unit, def.tool_names, def.skill, skill)
-    else
-      lines[#lines + 1] = fmt("%s: walk closer (your %s %d)", def.label, def.skill, skill)
+  for _, site in pairs(job_sites) do
+    local def = JOBS[site.kind]
+    if def then
+      local dx, dy = site.x - px, site.y - py
+      local dist = math.sqrt(dx * dx + dy * dy)
+      local standing = 0
+      for _, n in pairs(nodes) do
+        if n.kind == site.kind and n.hp > 0 then
+          local ax, ay = n.x - site.x, n.y - site.y
+          if ax * ax + ay * ay < 100 then standing = standing + 1 end
+        end
+      end
+      local skill = job_skill_of(pid, def.skill)
+      lines[#lines + 1] = fmt("%s - %d m, %d node(s), hold %s, your %s %d",
+        site.label or def.label, math.floor(dist), standing, def.tool_names, def.skill, skill)
     end
   end
   for _, l in ipairs(lines) do SendClientMessage(pid, COLOR_SERVER, l) end
@@ -260,14 +422,14 @@ local RANKS = { "lord", "steward", "retainer" }
 
 local ADMIN_NAMES = { "minsk" }   -- promoted on connect; extend or move into the database
 
-local db = GetDatabase()
+db = GetDatabase()
 
 local houses = {}         -- name -> { treasury, prestige, war, war_started, score, members = {lowerName = {rank}} }
 local playerHouse = {}    -- pid -> house name
 local playerRank = {}     -- pid -> rank index
 local accounts = {}       -- pid -> { name, money, known }
 
-local function fmt(...) return string.format(...) end
+fmt = function(...) return string.format(...) end
 
 local function mylog(text)
   SendClientMessageToAll(COLOR_SERVER, text)
@@ -321,14 +483,14 @@ local function save_house(name)
     { n = name, t = h.treasury, p = h.prestige, t2 = h.treasury, p2 = h.prestige }, function() end)
 end
 
-local function save_money(pid)
+save_money = function(pid)
   if not db or not accounts[pid] or not accounts[pid].known then return end
   accounts[pid].money = GetPlayerMoney(pid)
   db:Execute("UPDATE players SET money = @m WHERE name = @n",
     { m = accounts[pid].money, n = accounts[pid].name }, function() end)
 end
 
-local function earn(pid, amount)
+earn = function(pid, amount)
   GivePlayerMoney(pid, amount)
   local tax = math.floor(amount * ECONOMY.earn_tax)
   local name = playerHouse[pid]
@@ -513,6 +675,8 @@ function OnGameModeInit()
     end
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_sites (id VARCHAR(32) PRIMARY KEY, kind VARCHAR(16) NOT NULL DEFAULT 'mine', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, stock INT NOT NULL DEFAULT 0)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_skills (player VARCHAR(32), skill VARCHAR(16), level INT NOT NULL DEFAULT 0, PRIMARY KEY (player, skill))")
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_nodes (id VARCHAR(64) PRIMARY KEY, kind VARCHAR(24) NOT NULL DEFAULT 'node', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, hp INT NOT NULL DEFAULT 4, hp_max INT NOT NULL DEFAULT 4, res VARCHAR(16) NOT NULL DEFAULT 'stone', respawn_at BIGINT NOT NULL DEFAULT 0, mapid INT NOT NULL DEFAULT 0)")
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_blueprints (name VARCHAR(48) PRIMARY KEY, parts MEDIUMTEXT, cost INT NOT NULL DEFAULT 0, author VARCHAR(32))")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS auction (id INT AUTO_INCREMENT PRIMARY KEY, seller VARCHAR(32), res VARCHAR(16), amount INT NOT NULL DEFAULT 1, price INT NOT NULL DEFAULT 1)")
     local arows = db:QuerySync("SELECT id, seller, res, amount, price FROM auction")
     if arows then
@@ -534,102 +698,84 @@ function OnGameModeInit()
   local sx, sy, sz, syaw = GetDefaultSpawn()
   AddSpawnPoint(sx, sy, sz, syaw, "town")
 
-  -- default work sites near the spawn (kept in memory when there is no database)
-  local function job_ensure(id, kind, dx, dy)
-    if job_sites[id] then return end
-    local def = JOBS[kind]
-    job_sites[id] = { id = id, kind = kind, x = sx + dx, y = sy + dy, z = sz, stock = def.stock_max }
-    if db then
-      local s = job_sites[id]
-      db:Execute("INSERT INTO job_sites (id, kind, x, y, z, stock) VALUES (@i, @k, @x, @y, @z, @s)",
-        { i = id, k = kind, x = s.x, y = s.y, z = s.z, s = s.stock }, function() end)
-    end
-  end
-  job_ensure("mine1", "mine", -8.0, -4.0)
-  job_ensure("farm1", "farm", 8.0, -4.0)
-  job_ensure("forest1", "forest", 0.0, -10.0)
+  -- Work sites spread over Kuttenberg, each in a place that suits its trade:
+  -- a quarry by the hills, fields by the farmland, logging in the woods. Only
+  -- the coordinates are fixed; z comes from the terrain, so a site always sits on
+  -- the ground. Admins can re-place any site in the game with /jobsite.
+  local SITE_PLAN = {
+    { id = "mine_quarry",   kind = "mine",   x = 2870.0, y = 2960.0, label = "Kuttenberg quarry" },
+    { id = "mine_hills",    kind = "mine",   x = 3130.0, y = 800.0,  label = "Hillside adit" },
+    { id = "farm_lowlands", kind = "farm",   x = 1520.0, y = 1990.0, label = "Lowland fields" },
+    { id = "farm_mill",     kind = "farm",   x = 3060.0, y = 770.0,  label = "Mill fields" },
+    { id = "forest_woods",  kind = "forest", x = 660.0,  y = 3260.0, label = "North woods" },
+    { id = "forest_grove",  kind = "forest", x = 1740.0, y = 2810.0, label = "Old grove" },
+  }
 
-  -- visible work sites: compass marker + map icon (real game types) + props + use prompt
-  local JOB_NPC = { mine = "Foreman Dobesh", farm = "Reeve Matousek", forest = "Woodward Janek" }
   local mapinfo = GetMapInfo()
   Log(fmt("feudalwars: map folder=%s readOnly=%s objects=%s (level %s)",
     tostring(mapinfo and mapinfo.folder), tostring(mapinfo and mapinfo.readOnly),
     tostring(mapinfo and mapinfo.objects), GetLevel()))
-  local icon_types = {}
   for _, t in ipairs(GetMapIconTypes() or {}) do icon_types[t.name or ""] = true end
-  local function job_spawn_visual(site)
-    local def = JOBS[site.kind]
-    if not def then return end
-    -- clear old visuals (re-map, reload)
-    if site.marker then pcall(DestroyMarker, site.marker) site.marker = nil end
-    if site.mapicon then pcall(DeleteMapIcon, site.mapicon) site.mapicon = nil end
-    if site.props then for _, pe in ipairs(site.props) do pcall(DestroyEntity, pe) end end
-    site.props = {}
-    if site.interact then pcall(DestroyEntity, site.interact) site.interact = nil end
-    -- compass marker (quest symbol, always drawn)
-    local mid = CreateMarker(site.x, site.y, site.z + 1.0, MARKER_QUEST, 0, def.label)
-    if mid then site.marker = mid ShowMarkerForAll(mid)
-    else Log("feudalwars: marker refused for " .. site.id) end
-    -- map icon: real game type when the level knows it, else the legend icon number
-    local opts
-    if def.icon and icon_types[def.icon] then
-      opts = { type = def.icon, name = def.label }
-    else
-      Log(fmt("feudalwars: no map icon type '%s' on %s, using icon %d", tostring(def.icon), GetLevel(), def.icon_num or 0))
-      opts = { icon = def.icon_num or 0, name = def.label }
+
+  local function site_place(id, kind, x, y, label)
+    local z = terrain_z(x, y, sz)
+    local site = job_sites[id] or { id = id }
+    site.kind, site.x, site.y, site.z, site.label = kind, x, y, z, label or JOBS[kind].label
+    job_sites[id] = site
+    if db then
+      db:Execute("INSERT INTO job_sites (id, kind, x, y, z, stock) VALUES (@i, @k, @x, @y, @z, 0) " ..
+        "ON DUPLICATE KEY UPDATE kind=@k2, x=@x2, y=@y2, z=@z2",
+        { i = id, k = kind, x = x, y = y, z = z, k2 = kind, x2 = x, y2 = y, z2 = z }, function() end)
     end
-    local iid, ierr = CreateMapIcon(site.x, site.y, site.z, opts)
-    if iid then site.mapicon = iid
-    else Log(fmt("feudalwars: map icon refused for %s: %s", site.id, tostring(ierr))) end
-    -- the vein itself: a rock / trunk / soil mound you strike with the tool
-    if site.vein then pcall(DestroyEntity, site.vein) site.vein = nil end
-    if site.stock > 0 and def.vein_mesh then
-      local v = CreateProp(def.vein_mesh, site.x, site.y, site.z, 0, 1.2, false, nil)
-      if v then site.vein = v
-      else Log(fmt("feudalwars: vein refused: %s", def.vein_mesh)) end
-    end
-    -- physical props: crates, barrels, fireplace - the site looks like a work place
-    for i, mesh in ipairs(def.props or {}) do
-      local px = site.x + (i - 1) * 1.6 - 1.0
-      local pe = CreateProp(mesh, px, site.y + 1.0, site.z, (i * 37) % 360, 1, false, nil)
-      if pe then site.props[#site.props + 1] = pe
-      else Log(fmt("feudalwars: prop refused: %s", mesh)) end
-    end
-    -- foreman NPC with a prompt
-    local npc = CreateActor(nil, site.x + 1.5, site.y, site.z, 0, JOB_NPC[site.kind] or "Foreman", nil, "none", nil)
-    if npc then
-      SetActorPrompt(npc, "Ask about work")
-      site.props[#site.props + 1] = npc
-    end
-    -- E interaction: radius 3m so the prompt actually shows
-    local ie = CreateInteraction(site.x, site.y, site.z, "Work here (" .. site.kind .. ")", 3.0, nil)
-    if ie then
-      site.interact = ie
-      job_interactions[ie] = site.id
-      Log(fmt("feudalwars: interaction %d -> site %s (%s)", ie, site.id, site.kind))
-    else
-      Log("feudalwars: interaction refused for " .. site.id)
+    site_show(site)
+    site_raise_nodes(site)
+  end
+
+  -- load admin-mapped sites from the database first; else use the plan
+  local have_sites = next(job_sites) ~= nil
+  if not have_sites then
+    for _, p in ipairs(SITE_PLAN) do site_place(p.id, p.kind, p.x, p.y, p.label) end
+  else
+    for _, site in pairs(job_sites) do
+      site_show(site)
+      site_raise_nodes(site)
     end
   end
-  for _, site in pairs(job_sites) do job_spawn_visual(site) end
 
-  -- regrow job stocks on a timer; a refilled vein rises again
-  SetTimer(function()
-    for _, site in pairs(job_sites) do
-      local def = JOBS[site.kind]
-      if def and site.stock < def.stock_max then
-        local was_empty = site.stock <= 0
-        site.stock = math.min(def.stock_max, site.stock + math.max(1, math.floor(def.stock_max / 10)))
-        if db then
-          db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = site.stock, i = site.id }, function() end)
-        end
-        if was_empty and site.stock > 0 and def.vein_mesh and not site.vein then
-          local v = CreateProp(def.vein_mesh, site.x, site.y, site.z, 0, 1.2, false, nil)
-          if v then site.vein = v end
+  -- restore saved nodes (state survives a restart)
+  if db then
+    local nrows = db:QuerySync("SELECT id, kind, x, y, z, hp, hp_max, res, respawn_at, mapid FROM fw_nodes")
+    if nrows then
+      for _, r in ipairs(nrows) do
+        local def = JOBS[r.kind]
+        local n = node_define({
+          key = r.id, kind = r.kind, x = r.x, y = r.y, z = r.z,
+          mesh = def and def.vein_mesh, scale = def and (def.vein_scale or 1.2),
+          hp = r.hp_max or 4, res = r.res or "stone",
+          label = def and (def.node_label or "the vein"), mapid = r.mapid,
+          respawn_at = r.respawn_at or 0,
+        })
+        n.hp = r.hp or n.hp_max
+        if n.hp <= 0 then
+          if n.entity then pcall(DestroyEntity, n.entity) node_by_entity[n.entity] = nil n.entity = nil end
         end
       end
+      Log("feudalwars: loaded " .. #nrows .. " node(s)")
     end
-  end, 60000, true)
+  end
+
+  -- node growth: a broken node returns when its time comes
+  SetTimer(function()
+    local now = GetServerTime()
+    for _, n in pairs(nodes) do
+      if n.hp <= 0 and n.respawn_at > 0 and now >= n.respawn_at then
+        n.hp = n.hp_max
+        n.respawn_at = 0
+        node_persist(n)
+        node_show(n)
+      end
+    end
+  end, 5000, true)
 
   local shop = CreateShop("The King's Provisioner", 0.5, -1)
   SetShopItem(shop, "torch", 10, -1)
@@ -637,6 +783,16 @@ function OnGameModeInit()
   SetShopItem(shop, "bread", 5, -1)
   SetShopItem(shop, "water", 3, -1)
   CreateVendor(shop, "provisioner", sx + 2.0, sy + 2.0, sz, syaw + 180.0, "Provisioner Bohush", nil, nil)
+
+  -- the architect: an NPC by the spawn whose use key opens the blueprint workshop
+  bp_load_all()
+  local architect = CreateActor(nil, sx + 4.0, sy + 3.0, sz, 0, "Master Builder Havel", nil, "none", nil)
+  if architect then
+    SetActorPrompt(architect, "Plan a structure")
+    architect_npc = architect
+  end
+  local arch_spot = CreateInteraction(sx + 4.0, sy + 3.0, sz, "Plan a structure", 2.0, nil)
+  if arch_spot then arch_interaction = arch_spot end
 
   -- hotkeys: E = ask the site what to do, F2 = main menu (F1 is the photo mode).
   -- Work itself is by weapon swings on the vein (OnPlayerHitScenery) - nothing is locked.
@@ -959,95 +1115,134 @@ local player_lang = {}    -- pid -> "en" | "ru"
 local STR = {
   en = {
     menu_title = "Feudal Wars",
-    menu_keys = "Keys: E work where you stand, F collect the shift, F2 this menu, Esc close.",
-    menu_mouse = "If the mouse is stuck in the look-around, press the button:",
-    btn_mouse = "Free the mouse",
-    btn_me = "My character",
-    btn_hall = "House hall",
-    btn_admin = "Crown's console",
-    btn_settings = "Settings",
-    col_cmd = "Command",
-    col_what = "What it does",
-    btn_open = "Open",
-    settings_title = "Settings",
-    settings_lang = "Language",
-    settings_back = "Back",
+    menu_keys = "E — ask about work · F2 — this menu · Esc — close",
     lang_saved = "Language: English.",
   },
   ru = {
     menu_title = "Феодальные войны",
-    menu_keys = "Клавиши: E работать, F забрать смену, F2 это меню, Esc закрыть.",
-    menu_mouse = "Если мышь застряла в обзоре, нажми кнопку:",
-    btn_mouse = "Освободить мышь",
-    btn_me = "Мой персонаж",
-    btn_hall = "Зал дома",
-    btn_admin = "Королевский совет",
-    btn_settings = "Настройки",
-    col_cmd = "Команда",
-    col_what = "Что делает",
-    btn_open = "Открыть",
-    settings_title = "Настройки",
-    settings_lang = "Язык",
-    settings_back = "Назад",
+    menu_keys = "E — спросить о работе · F2 — это меню · Esc — закрыть",
     lang_saved = "Язык: русский.",
   },
 }
 
--- Menu actions: every button does the thing through UI, never sends you to the chat.
--- action: frame to open. Commands stay untranslated (typed as-is); titles/descs localize.
-local HELP_MENU = {
-  { action = "me", cmd = "/me", title = { en = "My character", ru = "Мой персонаж" }, desc = { en = "purse, house, standing", ru = "кошелёк, дом, положение" } },
-  { action = "hall", cmd = "/hall", title = { en = "House hall", ru = "Зал дома" }, desc = { en = "roster, treasury, wars", ru = "люди, казна, войны" } },
-  { action = "auction", cmd = "/auction", title = { en = "Auction", ru = "Торг" }, desc = { en = "sell resources, buy from others", ru = "продать ресурсы, купить у других" } },
-  { action = "job", cmd = "/job", title = { en = "Work", ru = "Работа" }, desc = { en = "strike the vein with the tool in your hands", ru = "бей жилу инструментом в руках" } },
-  { action = "goto", cmd = "/goto", title = { en = "Go to a site", ru = "Идти к месту" }, desc = { en = "walk to a work site or the spawn", ru = "перейти к работе или на площадь" } },
-  { action = "build", cmd = "/build", title = { en = "Build (admins)", ru = "Стройка (админы)" }, desc = { en = "raise a ready structure with a preview", ru = "построить готовое здание с предпросмотром" } },
-  { action = "editor", cmd = "/editor", title = { en = "Map editor (admins)", ru = "Редактор карты (админы)" }, desc = { en = "the game's own editor: fly, place meshes", ru = "встроенный редактор: полёт, объекты" } },
-  { action = "lang", cmd = "/lang", title = { en = "Language", ru = "Язык" }, desc = { en = "switch the menu language", ru = "сменить язык меню" } },
-  { action = "admin", cmd = "/admin", title = { en = "Crown's console (admins)", ru = "Совет короны (админы)" }, desc = { en = "players, kick, ban, money", ru = "игроки, кик, бан, деньги" } },
-}
-
-local function lang_of(pid) return player_lang[pid] or "en" end
-local function T(pid, key) return (STR[lang_of(pid)] or STR.en)[key] or key end
+lang_of = function(pid) return player_lang[pid] or "en" end
 
 local function open_menu(pid)
   open_frame(pid, "menu")
   local lang = lang_of(pid)
-  local cmds = {}
-  for _, h in ipairs(HELP_MENU) do
-    cmds[#cmds + 1] = { action = h.action, cmd = h.cmd, title = h.title[lang] or h.title.en, desc = h.desc[lang] or h.desc.en }
-  end
   local s = STR[lang] or STR.en
+  local cards = {}
+  local function add(section, id, title, desc, action)
+    cards[#cards + 1] = { id = id, section = section, title = title, desc = desc, action = action }
+  end
+  local L = MENU_TEXT[lang] or MENU_TEXT.en
+  add("main", "me", L.me_t, L.me_d, "me")
+  add("main", "work", L.work_t, L.work_d, "job")
+  add("main", "auction", L.auction_t, L.auction_d, "auction")
+  add("world", "goto_mine", L.goto_mine_t, L.goto_mine_d, "goto_mine")
+  add("world", "goto_farm", L.goto_farm_t, L.goto_farm_d, "goto_farm")
+  add("world", "goto_forest", L.goto_forest_t, L.goto_forest_d, "goto_forest")
+  add("world", "goto_spawn", L.goto_spawn_t, L.goto_spawn_d, "goto_spawn")
+  add("work", "skills", L.skills_t, L.skills_d, "skills")
+  add("work", "kit", L.kit_t, L.kit_d, "kit")
+  add("house", "hall", L.hall_t, L.hall_d, "hall")
+  add("trade", "trade", L.trade_t, L.trade_d, "auction")
+  add("build", "build", L.build_t, L.build_d, "build")
+  if isAdmin(pid) then
+    add("build", "editor", L.editor_t, L.editor_d, "editor")
+  end
   SendPlayerWebMessage(pid, "menu", {
-    commands = cmds, lang = lang,
-    title = s.menu_title, keys = s.menu_keys, mouse = s.menu_mouse,
-    btn_mouse = s.btn_mouse, btn_me = s.btn_me, btn_hall = s.btn_hall,
-    btn_admin = s.btn_admin, btn_settings = s.btn_settings,
-    col_cmd = s.col_cmd, col_what = s.col_what, btn_open = s.btn_open,
-    settings_title = s.settings_title, settings_lang = s.settings_lang,
-    settings_back = s.settings_back,
+    lang = lang, title = s.menu_title, keys = s.menu_keys, cards = cards,
   })
 end
 
+-- menu card texts (titles + descriptions) per language
+local MENU_TEXT = {
+  en = {
+    me_t = "My character", me_d = "Purse, house and standing",
+    work_t = "Work the veins", work_d = "Strike rocks, trunks and sheaves for ore, wood and grain",
+    auction_t = "The auction", auction_d = "Sell your goods, buy from other players",
+    goto_mine_t = "To the quarries", goto_mine_d = "Kuttenberg quarry and the hillside adit",
+    goto_farm_t = "To the fields", goto_farm_d = "Lowland and mill fields",
+    goto_forest_t = "To the woods", goto_forest_d = "The north woods and the old grove",
+    goto_spawn_t = "To the town square", goto_spawn_d = "Back to the spawn",
+    skills_t = "My skills", skills_d = "Mining, farming and woodcutting",
+    kit_t = "Borrow a tool", kit_d = "The foreman lends the right tool for the nearest site",
+    hall_t = "House hall", hall_d = "Roster, treasury and wars",
+    trade_t = "Market", trade_d = "Open the auction house",
+    build_t = "The architect", build_d = "Lay out, save and stamp blueprints (admins)",
+    editor_t = "Map editor", editor_d = "The game's own editor: fly, place meshes",
+  },
+  ru = {
+    me_t = "Мой персонаж", me_d = "Кошелёк, дом и положение",
+    work_t = "Работать на жилах", work_d = "Бей камни, стволы и снопы — руда, дерево, зерно",
+    auction_t = "Торг", auction_d = "Продай товар, купи у других игроков",
+    goto_mine_t = "К каменоломням", goto_mine_d = "Куттенбергская каменоломня и горный штрек",
+    goto_farm_t = "К полям", goto_farm_d = "Низинные и мельничные поля",
+    goto_forest_t = "К лесам", goto_forest_d = "Северный лес и старая роща",
+    goto_spawn_t = "На площадь", goto_spawn_d = "Обратно к точке появления",
+    skills_t = "Мои навыки", skills_d = "Горное дело, земледелие, лесорубка",
+    kit_t = "Одолжить инструмент", kit_d = "Бригадир выдаст нужный инструмент у ближней точки",
+    hall_t = "Зал дома", hall_d = "Люди, казна и войны",
+    trade_t = "Торг", trade_d = "Открыть торговый дом",
+    build_t = "Зодчий", build_d = "Разложи, сохрани и ставь чертежи (админы)",
+    editor_t = "Редактор карты", editor_d = "Встроенный редактор: полёт, объекты",
+  },
+}
+
 -- menu buttons act through UI: open the frame, never send you to the chat
 local function menu_do(pid, action)
+  if action == "menu" then open_menu(pid) return end
   close_frame(pid, "menu")
   if action == "me" then open_me(pid)
   elseif action == "hall" then
     if playerHouse[pid] then open_hall(pid)
     else SendClientMessage(pid, COLOR_RED, "you serve no lord - ask a house to take you in.") end
-  elseif action == "auction" then open_auction(pid)
+  elseif action == "auction" or action == "trade" then open_auction(pid)
+  elseif action == "build" then arch_open(pid)
   elseif action == "job" then job_status(pid)
-  elseif action == "goto" then
+  elseif action == "skills" then
+    local s = job_skills[pid] or {}
+    SendClientMessage(pid, COLOR_SERVER, fmt("skills: mining %d, farming %d, woodcutting %d.",
+      s.mining or 0, s.farming or 0, s.woodcutting or 0))
+  elseif action == "kit" then
+    local px, py = GetPlayerPos(pid)
+    local best, bestd = nil, 30.0
+    for _, site in pairs(job_sites) do
+      local dx, dy = site.x - px, site.y - py
+      local d = math.sqrt(dx * dx + dy * dy)
+      if d < bestd then best, bestd = site, d end
+    end
+    if best then
+      local def = JOBS[best.kind]
+      local tool = def.tools and def.tools[1]
+      if tool then
+        GivePlayerItem(pid, tool, 1)
+        SendClientMessage(pid, COLOR_YELLOW, fmt("the foreman lends you %s.", def.tool_names))
+      end
+    else
+      SendClientMessage(pid, COLOR_RED, "no work site near enough.")
+    end
+  elseif action == "goto_mine" or action == "goto_farm" or action == "goto_forest" then
+    local want = action:sub(6)
+    local px, py = GetPlayerPos(pid)
+    local best, bestd = nil, 1e9
+    for _, site in pairs(job_sites) do
+      if site.kind == want then
+        local dx, dy = site.x - px, site.y - py
+        local d = dx * dx + dy * dy
+        if d < bestd then best, bestd = site, d end
+      end
+    end
+    if best then SetPlayerPos(pid, best.x + 2.0, best.y, best.z, 0) end
+  elseif action == "goto_spawn" then
     local sp = GetSpawnPoints("town")[1]
     if sp then SetPlayerPos(pid, sp.x + 2.0, sp.y, sp.z, 0) end
-  elseif action == "build" then open_build(pid)
   elseif action == "editor" then
     if isAdmin(pid) then
       if IsPlayerWebReady(pid) then SetPlayerEditor(pid, "admin")
       else SendClientMessage(pid, COLOR_RED, "the editor needs the web layer: enable server interfaces in the launcher options and relog.") end
     end
-  elseif action == "lang" then open_menu(pid)
   elseif action == "admin" then if isAdmin(pid) then open_admin(pid) end
   end
 end
@@ -1075,6 +1270,10 @@ RegisterCommand("menu", function(pid)
   open_menu(pid)
 end, { help = "open the command menu" })
 
+RegisterCommand("auction", function(pid)
+  open_auction(pid)
+end, { help = "the market: sell and buy resources" })
+
 RegisterCommand("goto", function(pid, args)
   local where = (args:match("^(%S*)") or ""):lower()
   local dest = nil
@@ -1096,7 +1295,7 @@ end, { help = "walk to a work site or the spawn", params = "[mine|farm|forest|sp
 
 -- ---------------------------------------------------------------- admin
 
-local function isAdmin(pid) return IsPlayerAdmin(pid) end
+isAdmin = function(pid) return IsPlayerAdmin(pid) end
 
 -- map a work site to a real place: stand where the site should be, /jobsite <id|new> <mine|farm|forest>
 RegisterCommand("jobsite", function(pid, args)
@@ -1115,17 +1314,17 @@ RegisterCommand("jobsite", function(pid, args)
     id = kind .. math.floor(px) .. "_" .. math.floor(py)
   end
   local site = job_sites[id] or { id = id }
-  site.kind, site.x, site.y, site.z = kind, px, py, pz
-  site.stock = JOBS[kind].stock_max
+  site.kind, site.x, site.y, site.z = kind, px, py, terrain_z(px, py, pz)
   job_sites[id] = site
   if db then
-    db:Execute("INSERT INTO job_sites (id, kind, x, y, z, stock) VALUES (@i, @k, @x, @y, @z, @s) " ..
-      "ON DUPLICATE KEY UPDATE kind = @k2, x = @x2, y = @y2, z = @z2, stock = @s2",
-      { i = id, k = kind, x = px, y = py, z = pz, s = site.stock, k2 = kind, x2 = px, y2 = py, z2 = pz, s2 = site.stock }, function() end)
+    db:Execute("INSERT INTO job_sites (id, kind, x, y, z, stock) VALUES (@i, @k, @x, @y, @z, 0) " ..
+      "ON DUPLICATE KEY UPDATE kind = @k2, x = @x2, y = @y2, z = @z2",
+      { i = id, k = kind, x = px, y = py, z = site.z, k2 = kind, x2 = px, y2 = py, z2 = site.z }, function() end)
   end
-  job_spawn_visual(site)
+  site_show(site)
+  site_raise_nodes(site)
   SendClientMessage(pid, COLOR_YELLOW, fmt("work site %s (%s) mapped here.", id, kind))
-  Log(fmt("feudalwars: jobsite %s mapped to %.1f %.1f %.1f", id, px, py, pz))
+  Log(fmt("feudalwars: jobsite %s mapped to %.1f %.1f %.1f", id, px, py, site.z))
 end, { help = "map a work site to this place", params = "<id|new> <mine|farm|forest>", admin = true })
 
 RegisterCommand("admin", function(pid)
@@ -1171,93 +1370,262 @@ end, { help = "travel to a player", params = "<player>", admin = true, secret = 
 
 -- ---------------------------------------------------------------- builder: ready structures + preview
 
+-- ---------------------------------------------------------------- blueprints (the architect)
+-- A blueprint is a set of parts saved from the world: the architect lays out
+-- real game objects beside the player, the player strikes a rock to break it,
+-- and what stands is saved under a name. Then it is stamped anywhere, and every
+-- copy carries its own breakable nodes - cut a rock in any copy and it drops
+-- resources there.
+
 local BUILD_CATALOG = {
   tent = {
-    label = { en = "Campaign tent", ru = "Походная палатка" }, cost = 0,
+    label = { en = "Campaign tent", ru = "Походная палатка" },
     parts = { "objects/manmade/structures/living/tents/tent_big_fancy_a.cgf" },
   },
   stall = {
-    label = { en = "Market stall", ru = "Торговая лавка" }, cost = 0,
+    label = { en = "Market stall", ru = "Торговая лавка" },
     parts = {
       "objects/manmade/task_specific_props/trade/merge_market_bread_stand.cgf",
       "objects/manmade/common_furniture/barrels/barrel_a.cgf",
     },
   },
   camp = {
-    label = { en = "Campfire", ru = "Костёр" }, cost = 0,
+    label = { en = "Campfire", ru = "Костёр" },
     parts = {
       "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
       "objects/manmade/common_furniture/crates/crate_low_a.cgf",
     },
   },
   palisade = {
-    label = { en = "Palisade wall", ru = "Частокол" }, cost = 0,
+    label = { en = "Palisade wall", ru = "Частокол" },
     parts = { "objects/manmade/structures/defensive/walls/palisade/palisade_wall_a_v1.cgf" },
   },
   tower = {
-    label = { en = "Watch tower", ru = "Сторожевая башня" }, cost = 0,
+    label = { en = "Watch tower", ru = "Сторожевая башня" },
     parts = { "objects/manmade/structures/defensive/castles/unique/trosky/panna_wooden_tower.cgf" },
   },
   forge = {
-    label = { en = "Field forge", ru = "Полевая кузня" }, cost = 0,
+    label = { en = "Field forge", ru = "Полевая кузня" },
     parts = {
       "objects/manmade/task_specific_props/metal_industry/smithing/anvil.cgf",
       "objects/manmade/task_specific_props/metal_industry/smithing/forge_small_a.cgf",
     },
   },
+  rock_pile = {
+    label = { en = "Rock pile (mineable)", ru = "Нагромождение камней (добыча)" },
+    parts = { "objects/natural/rocks/boulder_granite_a.cgf", "objects/natural/rocks/boulder_granite_a.cgf" },
+    nodes = true,   -- its rocks are breakable on every copy
+  },
 }
 
-local function build_cancel(pid, silent)
-  local b = build_preview[pid]
-  if not b then return end
-  if b.timer then KillTimer(b.timer) end
-  for _, id in ipairs(b.ids or {}) do pcall(DeleteMapObject, id) end
-  build_preview[pid] = nil
-  if not silent then SendClientMessage(pid, COLOR_SERVER, "the builders stand down.") end
+local blueprints = {}    -- name -> { name, parts = {{mesh,x,y,z,yaw,scale,node}}, author }
+local arch_draft = {}    -- pid -> { name, ids = {map object ids} }
+
+local function bp_save_to_db(bp)
+  if not db then return end
+  db:Execute("INSERT INTO fw_blueprints (name, parts, author) VALUES (@n, @p, @a) " ..
+    "ON DUPLICATE KEY UPDATE parts=@p2, author=@a2",
+    { n = bp.name, p = JsonEncode(bp.parts), a = bp.author or "",
+      p2 = JsonEncode(bp.parts), a2 = bp.author or "" }, function() end)
 end
 
-local function open_build(pid)
+bp_load_all = function()
+  if not db then return end
+  local rows = db:QuerySync("SELECT name, parts, author FROM fw_blueprints")
+  if not rows then return end
+  for _, r in ipairs(rows) do
+    local ok, parts = pcall(JsonDecode, r.parts or "[]")
+    if ok and type(parts) == "table" then
+      blueprints[r.name] = { name = r.name, parts = parts, author = r.author }
+    end
+  end
+  Log("feudalwars: loaded " .. #rows .. " blueprint(s)")
+end
+
+local function arch_draft_clear(pid)
+  local d = arch_draft[pid]
+  if not d then return end
+  for _, id in ipairs(d.ids or {}) do
+    pcall(DeleteMapObject, id)
+    local key = node_by_entity[id]
+    if key then nodes[key] = nil node_by_entity[id] = nil end
+  end
+  arch_draft[pid] = nil
+end
+
+-- the architect lays a draft: catalogue parts, or a copy of a blueprint
+local function arch_draft_new(pid, name)
+  arch_draft_clear(pid)
+  local px, py, pz = GetPlayerPos(pid)
+  local yaw = math.floor(GetPlayerYaw(pid) / 90) * 90
+  local ids = {}
+  local spec = BUILD_CATALOG[name]
+  if spec then
+    for i, mesh in ipairs(spec.parts) do
+      local ox = math.cos(math.rad(yaw)) * ((i - 1) * 2.2)
+      local oy = math.sin(math.rad(yaw)) * ((i - 1) * 2.2)
+      local id = CreateMapObject(mesh, px + ox, py + oy, -1, { yaw = yaw, persist = false, solid = true })
+      if id then
+        ids[#ids + 1] = id
+        if spec.nodes then
+          -- the part is a breakable node in every copy; bind the existing object
+          local mo = GetMapObject(id)
+          if mo then
+            local nkey = node_hash("bp_" .. id, mo.x, mo.y)
+            local n = node_define_noshow({
+              key = nkey, kind = "mine", x = mo.x, y = mo.y, z = mo.z,
+              mesh = mo.mesh, is_map = true, mapid = id, yaw = mo.yaw, scale = mo.scale,
+              hp = 5, res = job_roll_drop(JOBS.mine), yield = 1,
+              label = "the boulder", prompt = "Strike the boulder",
+            })
+            n.entity = id
+            node_by_entity[id] = n.key
+          end
+        end
+      end
+    end
+  end
+  if #ids == 0 then
+    SendClientMessage(pid, COLOR_RED, "the ground refused the draft here (no map?).")
+    return
+  end
+  arch_draft[pid] = { name = name, ids = ids }
+  SendClientMessage(pid, COLOR_YELLOW,
+    "the architect lays the pieces before you. Strike the rocks to see them break, /arch save <name> to keep what stands, /arch cancel to sweep it.")
+  arch_open(pid)
+end
+
+-- save the draft's standing parts as a blueprint (broken rocks stay broken in it)
+local function arch_save(pid, name)
+  if not isAdmin(pid) then return end
+  local d = arch_draft[pid]
+  if not d or #d.ids == 0 then
+    SendClientMessage(pid, COLOR_RED, "nothing laid out to save - /arch new <kind> first.")
+    return
+  end
+  name = (name or ""):lower():gsub("[^%w_%-]", "")
+  if #name < 2 then
+    SendClientMessage(pid, COLOR_RED, "give the blueprint a name: /arch save <name>")
+    return
+  end
+  local cx, cy = nil, nil
+  local parts = {}
+  for _, id in ipairs(d.ids) do
+    local mo = GetMapObject(id)
+    if mo then
+      if not cx then cx, cy = mo.x, mo.y end
+      local nkey = node_by_entity[id]
+      parts[#parts + 1] = {
+        mesh = mo.mesh, x = mo.x - cx, y = mo.y - cy, z = mo.z,
+        yaw = mo.yaw or 0, scale = mo.scale, node = nkey ~= nil,
+      }
+    end
+  end
+  if #parts == 0 then
+    SendClientMessage(pid, COLOR_RED, "the draft vanished - nothing to save.")
+    return
+  end
+  local bp = { name = name, parts = parts, author = accounts[pid] and accounts[pid].name }
+  blueprints[name] = bp
+  bp_save_to_db(bp)
+  arch_draft_clear(pid)
+  SendClientMessage(pid, COLOR_YELLOW, fmt("blueprint '%s' saved (%d part(s)). Stamp it anywhere: /arch stamp %s", name, #parts, name))
+  arch_open(pid)
+end
+
+-- stamp a blueprint where the player stands; every part is a real object, node parts break
+local function arch_stamp(pid, name, wx, wy, wz, yaw)
+  name = (name or ""):lower()
+  local bp = blueprints[name]
+  if not bp then
+    SendClientMessage(pid, COLOR_RED, "no such blueprint - /arch list")
+    return
+  end
+  if not wx then
+    local x, y, z = GetPlayerPos(pid)
+    wx, wy, wz = x, y, z
+  end
+  yaw = yaw or math.floor(GetPlayerYaw(pid) / 90) * 90
+  local cos, sin = math.cos(math.rad(yaw)), math.sin(math.rad(yaw))
+  local made = 0
+  for _, p in ipairs(bp.parts) do
+    local px = wx + p.x * cos - p.y * sin
+    local py = wy + p.x * sin + p.y * cos
+    local pz = (p.z ~= nil and p.z > -100) and p.z or terrain_z(px, py, wz)
+    local id = CreateMapObject(p.mesh, px, py, pz, { yaw = (p.yaw or 0) + yaw, scale = p.scale, persist = true, solid = true })
+    if id then
+      made = made + 1
+      if p.node then
+        local n = node_define_noshow({
+          key = node_hash("stamp_" .. name .. "_" .. id, px, py), kind = "mine",
+          x = px, y = py, z = pz, mesh = p.mesh, is_map = true, mapid = id,
+          yaw = (p.yaw or 0) + yaw, scale = p.scale,
+          hp = 5, res = job_roll_drop(JOBS.mine), yield = 1,
+          label = "the boulder", prompt = "Strike the boulder",
+        })
+        n.entity = id
+        node_by_entity[id] = n.key
+      end
+    end
+  end
+  if made == 0 then
+    SendClientMessage(pid, COLOR_RED, "the ground refused the blueprint here.")
+    return
+  end
+  SendClientMessage(pid, COLOR_YELLOW, fmt("'%s' raised here (%d part(s)).", name, made))
+  Log(fmt("feudalwars: blueprint '%s' stamped at %.1f %.1f", name, wx, wy))
+end
+
+arch_open = function(pid)
   if not isAdmin(pid) then
-    SendClientMessage(pid, COLOR_RED, "only the crown's servants may raise structures.")
+    SendClientMessage(pid, COLOR_RED, "only the crown's servants may shape the land.")
     return
   end
   open_frame(pid, "build")
   local lang = lang_of(pid)
   local list = {}
   for key, b in pairs(BUILD_CATALOG) do
-    list[#list + 1] = { key = key, label = b.label[lang] or b.label.en, cost = b.cost }
+    list[#list + 1] = { key = key, label = b.label[lang] or b.label.en, kind = "catalog" }
   end
-  table.sort(list, function(a, b) return a.cost < b.cost end)
-  SendPlayerWebMessage(pid, "build", { lang = lang, structures = list })
-end
-
-local function build_place(pid, name)
-  if not isAdmin(pid) then return end
-  name = (name or ""):lower()
-  local spec = BUILD_CATALOG[name]
-  if not spec then return end
-  build_cancel(pid, true)
-  local px, py, pz = GetPlayerPos(pid)
-  local yaw = GetPlayerYaw(pid)
-  local fx, fy = math.sin(math.rad(yaw)) * 6.0, math.cos(math.rad(yaw)) * 6.0
-  local ids = {}
-  for i, mesh in ipairs(spec.parts) do
-    local id = CreateMapObject(mesh, px + fx + (i - 1) * 2.0, py + fy, pz, { yaw = yaw, persist = false })
-    if id then ids[#ids + 1] = id end
+  table.sort(list, function(a, b) return a.key < b.key end)
+  local bp_list = {}
+  for name, bp in pairs(blueprints) do
+    bp_list[#bp_list + 1] = { key = name, label = name, parts = #bp.parts }
   end
-  if #ids == 0 then
-    SendClientMessage(pid, COLOR_RED, "the ground refuses the builders here (no map, or a wrong mesh path).")
-    return
-  end
-  SendClientMessage(pid, COLOR_YELLOW, "it rises before you - a preview for 60 seconds.")
-  local t = SetTimer(function() build_cancel(pid) end, 60000, false)
-  build_preview[pid] = { name = name, ids = ids, timer = t }
-  open_build(pid)
+  table.sort(bp_list, function(a, b) return a.key < b.key end)
+  SendPlayerWebMessage(pid, "build", {
+    lang = lang, structures = list, blueprints = bp_list,
+    has_draft = arch_draft[pid] ~= nil,
+    draft_parts = arch_draft[pid] and #arch_draft[pid].ids or 0,
+  })
 end
 
 RegisterCommand("build", function(pid)
-  open_build(pid)
-end, { help = "raise a ready structure (admins)" })
+  arch_open(pid)
+end, { help = "the architect: lay out, save and stamp blueprints (admins)" })
+
+RegisterCommand("arch", function(pid, args)
+  if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may build."); return end
+  local verb, rest = args:match("^(%S*)%s*(.-)$")
+  verb = (verb or ""):lower()
+  if verb == "new" then
+    arch_draft_new(pid, (rest:match("^(%S*)") or ""):lower())
+  elseif verb == "save" then
+    arch_save(pid, rest)
+  elseif verb == "stamp" then
+    arch_stamp(pid, rest:match("^(%S*)") or "")
+  elseif verb == "list" then
+    local names = {}
+    for n, bp in pairs(blueprints) do names[#names + 1] = n .. " (" .. #bp.parts .. ")" end
+    SendClientMessage(pid, COLOR_YELLOW, "blueprints: " .. (#names > 0 and table.concat(names, ", ") or "none yet"))
+  elseif verb == "cancel" then
+    arch_draft_clear(pid)
+    SendClientMessage(pid, COLOR_SERVER, "the draft is swept away.")
+    arch_open(pid)
+  else
+    SendClientMessage(pid, COLOR_SERVER, "usage: /arch new <kind> | save <name> | stamp <name> | list | cancel")
+  end
+end, { help = "blueprint architect tools", params = "new|save|stamp|list|cancel", admin = true })
 
 RegisterCommand("editor", function(pid)
   if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may shape the land."); return end
@@ -1296,27 +1664,49 @@ function OnPlayerHitScenery(pid, hit)
 end
 
 function OnPlayerUseMapObject(pid, id)
-  local site_id = job_interactions[id]
-  local site = site_id and job_sites[site_id]
-  if site then
-    Log(fmt("feudalwars: E on map object %d -> site %s", id, site_id))
-    job_work_start(pid, site.kind, site_id)
+  -- a map object with a prompt: the architect's board or a blueprint boulder
+  if arch_interaction and id == arch_interaction then
+    arch_open(pid)
+    return
+  end
+  local nkey = node_by_entity[id]
+  if nkey and nodes[nkey] and nodes[nkey].hp > 0 then
+    local n = nodes[nkey]
+    SendClientMessage(pid, COLOR_SERVER, fmt("%s - strike it with a tool.", n.label or "the stone"))
+    return
   end
 end
 
 function OnPlayerInteract(pid, id)
-  local site_id = job_interactions[id]
-  local site = site_id and job_sites[site_id]
-  if site then
-    Log(fmt("feudalwars: E on interaction %d -> site %s", id, site_id))
-    job_work_start(pid, site.kind, site_id)
-  else
-    Log(fmt("feudalwars: E on unknown interaction %d (known: %d)", id, #job_interactions))
+  if arch_interaction and id == arch_interaction then
+    arch_open(pid)
+    return
   end
+  if architect_npc and id == architect_npc then
+    arch_open(pid)
+    return
+  end
+  local nkey = node_by_entity[id]
+  if nkey then
+    local n = nodes[nkey]
+    if n and n.hp > 0 then
+      SendClientMessage(pid, COLOR_SERVER, fmt("%s - %d/%d. Strike it with the right tool.", n.label or "the stone", n.hp, n.hp_max))
+    end
+    return
+  end
+  -- E near a work site: tell what to do
+  local px, py, pz = GetPlayerPos(pid)
+  local best, bestd = nil, 8.0
+  for _, site in pairs(job_sites) do
+    local dx, dy = site.x - px, site.y - py
+    local d = math.sqrt(dx * dx + dy * dy)
+    if d < bestd then best, bestd = site, d end
+  end
+  if best then job_work_start(pid, best.kind, best.id) end
 end
 
 function OnPlayerDisconnect(pid, reason)
-  build_cancel(pid, true)
+  arch_draft_clear(pid)
   save_money(pid)
   job_hit_cd[pid] = nil
   job_skills[pid] = nil
@@ -1331,7 +1721,7 @@ end
 
 -- UI frames talk via KcdMp.emitServer -> OnClientEvent (source = frame name).
 -- OnPlayerWebSurfaceEvent is only for in-world boards (CreateWebSurface), which we don't use.
-local function close_frame(pid, frame)
+close_frame = function(pid, frame)
   DestroyPlayerWebFrame(pid, frame)
   SetPlayerWebFocus(pid, frame, false, false)
   SetPlayerCursor(pid, false)
@@ -1468,11 +1858,16 @@ local function web_event(pid, name, data)
     end
   elseif name == "build.close" then
     close_frame(pid, "build")
-  elseif name == "build.place" then
-    build_place(pid, data.name)
+  elseif name == "build.new" then
+    arch_draft_new(pid, data.name)
+  elseif name == "build.save" then
+    arch_save(pid, data.name)
+  elseif name == "build.stamp" then
+    arch_stamp(pid, data.name)
+    arch_open(pid)
   elseif name == "build.cancel" then
-    build_cancel(pid)
-    open_build(pid)
+    arch_draft_clear(pid)
+    arch_open(pid)
   elseif name == "admin.close" then
     close_frame(pid, "admin")
   elseif isAdmin(pid) then

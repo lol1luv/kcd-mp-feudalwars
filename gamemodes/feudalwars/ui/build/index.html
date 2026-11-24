@@ -6,18 +6,22 @@
 <link rel="stylesheet" href="../feudalwars.css">
 </head>
 <body>
-<section class="window" aria-label="Builder">
+<section class="window" aria-label="Architect">
   <header>
     <div class="crest">🏰</div>
-    <h1 id="title">Builder</h1>
+    <h1 id="title">Architect</h1>
     <button class="close" id="close" type="button" aria-label="Close">&times;</button>
   </header>
   <div id="body">
     <p class="lead" id="lead"></p>
-    <table id="catalog"><thead><tr><th id="th-name"></th><th id="th-cost"></th><th></th></tr></thead><tbody></tbody></table>
-    <div style="margin-top:12px"><button class="act" id="cancel" type="button"></button></div>
+
+    <h2 id="draft-h"></h2>
+    <div class="cards" id="draft-row"></div>
+
+    <h2 id="bp-h"></h2>
+    <table id="bps"><thead><tr><th id="th-bp-name"></th><th id="th-bp-parts"></th><th></th></tr></thead><tbody></tbody></table>
   </div>
-  <footer>Feudal Wars &middot; Bohemia, 1403</footer>
+  <footer id="foot"></footer>
 </section>
 <script src="build.js"></script>
 </body>

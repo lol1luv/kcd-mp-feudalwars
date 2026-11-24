@@ -39,6 +39,6 @@
 
   $("close").addEventListener("click", () => KcdMp.emitServer("me.close"));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") KcdMp.emitServer("me.close"); });
-  $("go-hall").addEventListener("click", () => KcdMp.emitServer("menu.run", { cmd: "/hall" }));
-  $("go-menu").addEventListener("click", () => KcdMp.emitServer("menu.run", { cmd: "/menu" }));
+  $("go-hall").addEventListener("click", () => KcdMp.emitServer("menu.run", { action: "hall" }));
+  $("go-menu").addEventListener("click", () => KcdMp.emitServer("menu.run", { action: "menu" }));
 })();

@@ -6,36 +6,72 @@
 <link rel="stylesheet" href="../feudalwars.css">
 </head>
 <body>
-<section class="window menu" aria-label="Menu">
-  <header>
-    <div class="crest">⚔</div>
-    <h1 id="title">Feudal Wars</h1>
-    <button class="close" id="close" type="button" aria-label="Close">&times;</button>
-  </header>
-  <div id="body">
-    <p class="lead" id="keys"></p>
-    <p class="lead" id="mouse-line"><span id="mouse-text"></span> <button class="act small" id="cursor" type="button"></button></p>
-    <div class="hero-buttons">
-      <button class="act gold big" id="go-me" type="button"></button>
-      <button class="act gold big" id="go-hall" type="button"></button>
-      <button class="act gold big" id="go-admin" type="button"></button>
-      <button class="act big" id="go-settings" type="button"></button>
+<div class="shell">
+  <aside class="rail">
+    <div class="crest big">⚔</div>
+    <div class="rail-title" id="rail-title">Feudal Wars</div>
+    <nav class="rail-nav">
+      <button type="button" data-sec="main" class="on" id="nav-main"></button>
+      <button type="button" data-sec="world" id="nav-world"></button>
+      <button type="button" data-sec="work" id="nav-work"></button>
+      <button type="button" data-sec="house" id="nav-house"></button>
+      <button type="button" data-sec="trade" id="nav-trade"></button>
+      <button type="button" data-sec="build" id="nav-build"></button>
+      <button type="button" data-sec="settings" id="nav-settings"></button>
+    </nav>
+    <div class="rail-foot">
+      <button class="act small" id="cursor" type="button"></button>
+      <button class="close" id="close" type="button" aria-label="Close">&times;</button>
     </div>
-    <div id="panel-main">
-      <table id="cmds"><thead><tr><th id="th-cmd"></th><th id="th-what"></th><th></th></tr></thead><tbody></tbody></table>
-    </div>
-    <div id="panel-settings" hidden>
-      <h2 id="settings-title"></h2>
-      <p class="lead" id="settings-lang-label"></p>
-      <div class="hero-buttons">
-        <button class="act gold big" id="lang-en" type="button">English</button>
-        <button class="act gold big" id="lang-ru" type="button">Русский</button>
+  </aside>
+
+  <main class="pane">
+    <header class="pane-head">
+      <h1 id="pane-title"></h1>
+      <p class="lead" id="pane-lead"></p>
+    </header>
+
+    <section class="pane-body" id="sec-main">
+      <div class="cards" id="hero-cards"></div>
+      <div class="hint" id="keys-hint"></div>
+    </section>
+
+    <section class="pane-body" id="sec-world" hidden>
+      <div class="cards" id="world-cards"></div>
+    </section>
+
+    <section class="pane-body" id="sec-work" hidden>
+      <h2 id="work-h"></h2>
+      <div class="cards" id="work-cards"></div>
+      <div class="hint" id="work-hint"></div>
+    </section>
+
+    <section class="pane-body" id="sec-house" hidden>
+      <div class="cards" id="house-cards"></div>
+    </section>
+
+    <section class="pane-body" id="sec-trade" hidden>
+      <h2 id="trade-h"></h2>
+      <p class="lead" id="trade-lead"></p>
+      <button class="act gold big" id="open-auction" type="button"></button>
+    </section>
+
+    <section class="pane-body" id="sec-build" hidden>
+      <h2 id="build-h"></h2>
+      <p class="lead" id="build-lead"></p>
+      <button class="act gold big" id="open-build" type="button"></button>
+    </section>
+
+    <section class="pane-body" id="sec-settings" hidden>
+      <h2 id="set-h"></h2>
+      <p class="lead" id="set-lang"></p>
+      <div class="cards">
+        <button class="card" id="lang-en" type="button"><span class="card-t">English</span></button>
+        <button class="card" id="lang-ru" type="button"><span class="card-t">Русский</span></button>
       </div>
-      <div style="margin-top:12px"><button class="act" id="settings-back" type="button"></button></div>
-    </div>
-  </div>
-  <footer>Feudal Wars &middot; Bohemia, 1403</footer>
-</section>
+    </section>
+  </main>
+</div>
 <script src="menu.js"></script>
 </body>
 </html>
