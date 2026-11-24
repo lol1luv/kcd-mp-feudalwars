@@ -58,7 +58,7 @@ else
       mv -f ./start.sh.new ./start.sh
       mkdir -p gamemodes
       cp -f "$SRC_DIR"/gamemodes/feudalwars.lua ./gamemodes/feudalwars.lua
-      cp -rf "$SRC_DIR"/gamemodes/feudalwars ./gamemodes/
+      cp -rf "$SRC_DIR"/gamemodes/feudalwars/. ./gamemodes/feudalwars/
       chmod +x KcdMp.Server start.sh
       echo "$REMOTE_SHA" > .fw_version
       echo "Updated to $REMOTE_SHA."
