@@ -54,7 +54,9 @@ local JOBS = {
 
 local job_sites = {}    -- id -> { id, kind, x, y, z, stock }
 local job_work = {}     -- pid -> { site_id, ready_at }
-local job_skills = {}   -- pid -> { mining = n, farming = n, woodcutting = n }
+local job_skills = {}    -- pid -> { mining = n, farming = n, woodcutting = n }
+local job_interactions = {} -- interaction id -> job kind
+local build_preview = {}  -- pid -> { name, ids, timer }
 
 local function job_skill_of(pid, skill)
   local s = job_skills[pid]
@@ -390,6 +392,25 @@ function OnGameModeInit()
   job_ensure("farm1", "farm", 8.0, -4.0)
   job_ensure("forest1", "forest", 0.0, -10.0)
 
+  -- visible work sites: compass marker + map icon + foreman NPC + use prompt
+  local JOB_ICON = { mine = "mine", farm = "farm", forest = "camp" }
+  local JOB_NPC = { mine = "Foreman Dobesh", farm = "Reeve Matousek", forest = "Woodward Janek" }
+  for _, site in pairs(job_sites) do
+    local def = JOBS[site.kind]
+    if def then
+      local mid = CreateMarker(site.x, site.y, site.z + 1.0, MARKER_POINT, 0, def.label)
+      if mid then ShowMarkerForAll(mid) end
+      local ok, iid = pcall(CreateMapIcon, site.x, site.y, site.z, { type = JOB_ICON[site.kind] or "camp", name = def.label })
+      if not ok or not iid then
+        CreateMapIcon(site.x, site.y, site.z, { icon = 0, name = def.label })
+      end
+      local npc = CreateActor(nil, site.x + 1.5, site.y, site.z, 0, JOB_NPC[site.kind] or "Foreman", nil, "none", nil)
+      if npc then SetActorPrompt(npc, "Ask about work") end
+      local iid2 = CreateInteraction(site.x, site.y, site.z, "Work here (/job " .. site.kind .. ")")
+      if iid2 then job_interactions[iid2] = site.kind end
+    end
+  end
+
   -- regrow job stocks on a timer
   SetTimer(function()
     for _, site in pairs(job_sites) do
@@ -512,17 +533,6 @@ function OnPlayerSpawn(pid)
     local h = houses[name]
     SendClientMessage(pid, COLOR_SERVER, fmt("You serve the house of %s. Treasury: %d, prestige: %d.", name, h.treasury, h.prestige))
   end
-end
-
-function OnPlayerDisconnect(pid, reason)
-  save_money(pid)
-  job_work[pid] = nil
-  job_skills[pid] = nil
-  local name = playerHouse[pid]
-  if name and houses[name] then houses[name].members[GetPlayerName(pid):lower()] = nil end
-  playerHouse[pid] = nil
-  playerRank[pid] = nil
-  accounts[pid] = nil
 end
 
 function OnPlayerDeath(pid, attacker)
@@ -673,8 +683,7 @@ RegisterCommand("pay", function(pid, args)
   SendClientMessage(target, COLOR_SERVER, fmt("%s paid you %d groschen.", GetPlayerName(pid), amount))
 end, { help = "pay another player", params = "<player> <amount>" })
 
-RegisterCommand("farm", function(pid) earn(pid, ECONOMY.farm_pay) end, { help = "work the field for groschen" })
-RegisterCommand("craft", function(pid) earn(pid, ECONOMY.craft_pay) end, { help = "work the forge for groschen" })
+-- /farm and /craft removed: use /job mine|farm|forest (visible sites with foremen, skills, map icons)
 
 RegisterCommand("job", function(pid, args)
   local verb = (args:match("^(%S*)") or ""):lower()
@@ -709,6 +718,49 @@ RegisterCommand("prestige", function(pid, args)
     SendClientMessage(pid, COLOR_SERVER, fmt("%s prestige: %d", name, h.prestige))
   end
 end, { help = "the house's standing", params = "[info|raise]" })
+
+-- ---------------------------------------------------------------- help menu
+
+local HELP_MENU = {
+  { cmd = "/me", desc = "your character: purse, house, standing (opens the page)" },
+  { cmd = "/hall", desc = "the house hall: roster, treasury, wars (opens the page)" },
+  { cmd = "/house create|join|leave|list|info", desc = "found, join or leave a house" },
+  { cmd = "/war declare|peace|status", desc = "declare wars, sue for peace, check the score" },
+  { cmd = "/job mine|farm|forest|done|skills", desc = "work at the marked sites: mine, field, logging camp" },
+  { cmd = "/goto mine|farm|forest|spawn", desc = "walk to a work site (teleport)" },
+  { cmd = "/money", desc = "count your groschen" },
+  { cmd = "/pay <player> <amount>", desc = "pay another player (5% tax to your house)" },
+  { cmd = "/prestige info|raise", desc = "the house's standing" },
+  { cmd = "/build list|place|cancel", desc = "raise a ready structure from the catalogue" },
+  { cmd = "/editor", desc = "open the map editor (admins): place meshes by hand" },
+  { cmd = "/admin", desc = "open the crown's console (admins)" },
+}
+
+RegisterCommand("help", function(pid)
+  SendClientMessage(pid, COLOR_YELLOW, "Feudal Wars - commands:")
+  for _, h in ipairs(HELP_MENU) do
+    SendClientMessage(pid, COLOR_SERVER, h.cmd .. " - " .. h.desc)
+  end
+end, { help = "list all commands with descriptions" })
+
+RegisterCommand("goto", function(pid, args)
+  local where = (args:match("^(%S*)") or ""):lower()
+  local dest = nil
+  if where == "spawn" then
+    local sp = GetSpawnPoints("town")[1]
+    if sp then dest = sp end
+  else
+    for _, site in pairs(job_sites) do
+      if site.kind == where then dest = site break end
+    end
+  end
+  if not dest then
+    SendClientMessage(pid, COLOR_RED, "usage: /goto [mine|farm|forest|spawn]")
+    return
+  end
+  SetPlayerPos(pid, dest.x + 2.0, dest.y, dest.z, 0)
+  SendClientMessage(pid, COLOR_SERVER, "you walk to " .. (JOBS[where] and JOBS[where].label or "the town square") .. ".")
+end, { help = "walk to a work site or the spawn", params = "[mine|farm|forest|spawn]" })
 
 -- ---------------------------------------------------------------- admin
 
@@ -754,6 +806,114 @@ RegisterCommand("tp", function(pid, args)
   local x, y, z, yaw = GetPlayerPos(tid)
   SetPlayerPos(pid, x + 1, y, z, yaw)
 end, { help = "travel to a player", params = "<player>", admin = true, secret = true })
+
+-- ---------------------------------------------------------------- builder: ready structures + preview
+
+local BUILD_CATALOG = {
+  tent = {
+    label = "a campaign tent", cost = 200,
+    parts = { "objects/manmade/common_fixtures/tents/tent_a.cgf" },
+  },
+  stall = {
+    label = "a market stall", cost = 500,
+    parts = { "objects/manmade/common_furniture/tables/table_market.cgf" },
+  },
+  palisade = {
+    label = "a palisade wall", cost = 800,
+    parts = { "objects/manmade/fortifications/palisade_wall.cgf" },
+  },
+  tower = {
+    label = "a watch tower", cost = 2000,
+    parts = { "objects/manmade/fortifications/watch_tower.cgf" },
+  },
+}
+
+local function build_cancel(pid, silent)
+  local b = build_preview[pid]
+  if not b then return end
+  if b.timer then KillTimer(b.timer) end
+  for _, id in ipairs(b.ids or {}) do pcall(DeleteMapObject, id) end
+  build_preview[pid] = nil
+  if not silent then SendClientMessage(pid, COLOR_SERVER, "the builders stand down.") end
+end
+
+RegisterCommand("build", function(pid, args)
+  local verb, rest = args:match("^(%S*)%s*(.-)$")
+  verb = (verb or ""):lower()
+  if verb == "list" or verb == "" then
+    SendClientMessage(pid, COLOR_YELLOW, "Ready structures (the preview stands 60 seconds):")
+    for key, b in pairs(BUILD_CATALOG) do
+      SendClientMessage(pid, COLOR_SERVER, fmt("/build place %s - %s (%d groschen)", key, b.label, b.cost))
+    end
+    SendClientMessage(pid, COLOR_SERVER, "or open the map editor by hand: /editor")
+    return
+  end
+  if verb == "cancel" then build_cancel(pid) return end
+  if verb ~= "place" then
+    SendClientMessage(pid, COLOR_RED, "usage: /build [list|place <name>|cancel]")
+    return
+  end
+  local name = (rest:match("^(%S*)") or ""):lower()
+  local spec = BUILD_CATALOG[name]
+  if not spec then
+    SendClientMessage(pid, COLOR_RED, "no such structure - /build list for the catalogue.")
+    return
+  end
+  if GetPlayerMoney(pid) < spec.cost then
+    SendClientMessage(pid, COLOR_RED, fmt("%s costs %d groschen.", spec.label, spec.cost))
+    return
+  end
+  build_cancel(pid, true)
+  local px, py, pz = GetPlayerPos(pid)
+  local yaw = GetPlayerYaw(pid)
+  local fx, fy = math.sin(math.rad(yaw)) * 6.0, math.cos(math.rad(yaw)) * 6.0
+  local ids = {}
+  for i, mesh in ipairs(spec.parts) do
+    local id = CreateMapObject(mesh, px + fx + (i - 1) * 2.0, py + fy, pz, { yaw = yaw, persist = false })
+    if id then ids[#ids + 1] = id end
+  end
+  if #ids == 0 then
+    SendClientMessage(pid, COLOR_RED, "the ground refuses the builders here (no map, or a wrong mesh path).")
+    return
+  end
+  GivePlayerMoney(pid, -spec.cost)
+  save_money(pid)
+  SendClientMessage(pid, COLOR_YELLOW, fmt("%s rises before you - a preview for 60 seconds. /build place again to keep it, /build cancel to tear it down.", spec.label))
+  local t = SetTimer(function() build_cancel(pid) end, 60000, false)
+  build_preview[pid] = { name = name, ids = ids, timer = t }
+end, { help = "raise a ready structure with a preview", params = "[list|place <name>|cancel]" })
+
+RegisterCommand("editor", function(pid)
+  if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may shape the land."); return end
+  local ok, err = SetPlayerEditor(pid, "admin")
+  if not ok then SendClientMessage(pid, COLOR_RED, "the editor refuses: " .. tostring(err)) end
+end, { help = "open the map editor (admins)", admin = true })
+
+function OnPlayerUseMapObject(pid, id)
+  local kind = job_interactions[id]
+  if kind and JOBS[kind] then
+    job_work_start(pid, kind)
+  end
+end
+
+function OnPlayerInteract(pid, id)
+  local kind = job_interactions[id]
+  if kind and JOBS[kind] then
+    job_work_start(pid, kind)
+  end
+end
+
+function OnPlayerDisconnect(pid, reason)
+  build_cancel(pid, true)
+  save_money(pid)
+  job_work[pid] = nil
+  job_skills[pid] = nil
+  local name = playerHouse[pid]
+  if name and houses[name] then houses[name].members[GetPlayerName(pid):lower()] = nil end
+  playerHouse[pid] = nil
+  playerRank[pid] = nil
+  accounts[pid] = nil
+end
 
 -- ---------------------------------------------------------------- web events
 

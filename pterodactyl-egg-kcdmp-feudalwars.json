@@ -54,9 +54,9 @@
         },
         {
             "name": "Level",
-            "description": "Map level: klaster, trosecko or kutnohorsko.",
+            "description": "Map level: klaster, trosecko or kutnohorsko. Kuttenberg = kutnohorsko.",
             "env_variable": "LEVEL",
-            "default_value": "klaster",
+            "default_value": "kutnohorsko",
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|in:klaster,trosecko,kutnohorsko"
