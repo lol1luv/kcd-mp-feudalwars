@@ -1,112 +1,184 @@
 # Feudal Wars — AI Handoff Document
-> Этот файл — единый источник правды для любой другой ИИ. Дополнять при каждом изменении. Формат: `[x]` выполнено, `[ ]` не выполнено.
 
-## 1. Цель проекта
-- KCD:MP Feudal Wars сервер в Pterodactyl: egg + .NET 10 + MySQL + автообновление с GitHub.
+> Единый источник правды для любой другой ИИ. Переписан 2026-11-24 по факту (git + код + boot-тест).
+> Формат: `[x]` проверено/сделано, `[ ]` не сделано или не проверено в игре.
+
+---
+
+## 1. Что это
+
+- KCD:MP (Kingdom Come: Deliverance Multiplayer) RP-сервер «Feudal Wars» в Pterodactyl.
 - Репо: `https://github.com/lol1luv/kcd-mp-feudalwars`, ветка `main`.
-- Гейм-мод: `gamemodes/feudalwars.lua` + UI `gamemodes/feudalwars/ui/` (фреймы `me/hall/admin/notice`).
-- SDK — единственный источник API: `sdk/KcdMp.d.lua`. Доки: `https://docs.kcd-mp.com/`.
+- Гейм-мод — **папка**: вход `gamemodes/feudalwars.lua` + 9 модулей в `gamemodes/feudalwars/` (см. §6).
+- UI — `gamemodes/feudalwars/ui/` (9 фреймов, см. §7).
+- SDK — единственный источник API: `sdk/KcdMp.d.lua` (~13000 строк). Доки: `https://docs.kcd-mp.com/`.
+- Язык мода: Lua 5.4 (NLua), скрипты trusted, доступен luanet к .NET.
 
-## 2. Инфраструктура (не менять без спроса)
+---
+
+## 2. Инфраструктура
+
 - Хост `cicada`, VM `201` = `pterodactyl-wings` (QEMU guest agent иногда падает).
-- Панель: `https://panel.pingline.xyz`, сервер `https://panel.pingline.xyz/server/9cb7b632/databases`.
-- Старый сервер UUID `9cb7b632-fbd9-4fff-97ab-4f062f489e1`, новый `16e44d50-dc1d-4c2d-a6b6-29b9e63c74d4`.
-- Образ: `ghcr.io/parkervcp/yolks:dotnet_8` (внутри .NET 8), серверу нужен `.NET 10.0.0` → ставится в `/home/container/dotnet` через `dotnet-install.sh --channel 10.0`.
-- STARTUP итог: `bash start.sh`; `start.sh` выставляет `DOTNET_ROOT=$PWD/dotnet`.
-- Database Host `test` = `192.168.0.201:3306`. MariaDB на `201` слушает `0.0.0.0:3306`. `KCd` не резолвится → использовать IP.
-- Ручная БД `KCD` / юзер `Akne` / пароль `MAratigosha2211`; панельная БД `s46_KCD` / юзер `u46_yKIA2nRFP9` / пароль `^hTZQ9UY=mi3VkX0TA^=W9DC`.
-- Пароль панели менялся на `FwPanelDb91xQ` в `.env` на `200` и в MariaDB.
-- Билд `KcdMp-server-0.51.1` (linux+windows) в корне; `net10.0`; папка `KcdMp-server-0.51.1/` в `.gitignore`.
-- `pterodactyl-start.sh` = `start.sh` в контейнере: чекает `api.github.com/repos/.../commits/main`, сравнивает с `.fw_version`, обновляет бинарники/гейммод/UI. `AUTO_UPDATE=0` отключает.
+- Панель: `https://panel.pingline.xyz`. Сервер UUID `16e44d50-dc1d-4c2d-aba6-29b9e63c74d4`.
+- MariaDB: `192.168.0.201:3306` (слушает `0.0.0.0`). Имя хоста `KCd` не резолвится — использовать IP.
+- Панельная БД: `s46_KCD` / `u46_yKIA2nRFP9` / `^hTZQ9UY=mi3VkX0TA^=W9DC`.
+- Образ: `ghcr.io/parkervcp/yolks:dotnet_8` (внутри .NET 8). Серверу нужен **.NET 10** → ставится в `/home/container/dotnet` через `dotnet-install.sh --channel 10.0`.
+- STARTUP: `bash start.sh`. `start.sh` выставляет `DOTNET_ROOT=$PWD/dotnet`.
+- Билд `KcdMp-server-0.51.1/` (linux+windows) в корне, `net10.0`, в `.gitignore` (в репо лежат только бинарники linux в корне: `KcdMp.Server`, `*.dll`, `*.so`).
 
-## 3. Что когда делать (реинсталл / реимпорт / рестарт)
-- [x] Запомнить правило:
-  - **Restart** — достаточно, если поменялся только `gamemodes/feudalwars.lua` или UI. `start.sh` сам подтянет `main` при старте.
-  - **Reimport egg + Restart** — если поменялся `pterodactyl-egg-kcdmp-feudalwars.json` (переменные, `config.files`, install-скрипт). Reimport в Admin → Nests, затем проверить Startup-переменные сервера.
-  - **Reinstall** — только если сломан рантайм/dotnet, бинарники, или install-скрипт поменялся кардинально и надо переустановить файлы с нуля. Для смены карты/команд НЕ нужен.
-- [x] Смена карты `klaster/trosecko/kutnohorsko`: поменять Startup-переменную `LEVEL` в панели → Restart. Дефолт в egg сейчас `kutnohorsko`.
-- Текущий вопрос юзера (2026-11-24): «надо ли реинстал?» → **Нет. Нужны Reimport egg (т.к. дефолт LEVEL поменялся) + смена LEVEL=kutnohorsko в Startup + Restart.**
+---
 
-## 4. Выполнено
-- [x] Починен entrypoint + `DOTNET_ROOT` inline, затем переход на `bash start.sh`.
-- [x] Egg-переменные `DB_DRIVER/HOST/PORT/USERNAME/PASSWORD/DATABASE`; генерация `[gamemode.database]`; Wings-маппинг.
-- [x] `mkdir -p /mnt/server/data` (фикс `data/server.db`).
-- [x] Созданы БД `KCD`+`Akne` и панельная `s46_KCD`; сервер стартовал `listening on udp/25566`, `mysql at 192.168.0.201:3306/KCD`.
-- [x] Обновлены бинарники до `0.51.1`; install-скрипт на `refs/heads/main` с always-refresh.
-- [x] Исправлен `feudalwars.lua`: `SendPlayerWebFrame` → `ShowPlayerWebFrame` (4 места).
-- [x] `pterodactyl-start.sh`: автообновление с GitHub.
-- [x] Модуль работ v1 (`1a95abb`): шахта/ферма/лесопилка у спавна, stock, навыки, `/job mine|farm|forest|done|skills`, таблицы `job_sites`/`job_skills`.
-- [x] Видимость работ (`1837202`): compass marker (`CreateMarker`+`ShowMarkerForAll`), иконка карты (`CreateMapIcon`), NPC-бригадир (`CreateActor`+`SetActorPrompt`), точка взаимодействия (`CreateInteraction`), `/goto mine|farm|forest|spawn`.
-- [x] Чистка команд: удалены `/farm`, `/craft` (дубли `/job`). Добавлен `/help` с меню всех команд.
-- [x] Редактор: `/build list|place|cancel` (каталог tent/stall/palisade/tower, превью 60 сек через `CreateMapObject persist=false` + `DeleteMapObject`), `/editor` (админы, `SetPlayerEditor(pid,"admin")`), `OnPlayerUseMapObject`+`OnPlayerInteract` → старт смены.
-- [x] Дефолт карты в egg: `klaster` → `kutnohorsko`.
-- [x] Кросс-чек всех вызовов мода против `sdk/KcdMp.d.lua` — чисто (кроме SQL-ключей KEY/VALUES/VARCHAR).
+## 3. Деплой: что когда делать
 
-## 5. Не выполнено / следующие шаги
-- [x] Карта сменилась на Куттенберг (подтверждено юзером 2026-11-24). Reimport + LEVEL=kutnohorsko + Restart сработали.
-- [ ] Проверить в игре: маркеры работ на компасе, иконки на карте (M), F2 меню, E работа / F сбор, `/goto mine`, `/job mine` → `/job done`, `/build list` → `/build place tent`, `/editor` (админ).
-- [ ] ВАЖНО: карта меняется только через Startup `LEVEL=kutnohorsko` + Restart. Из Lua сменить карту нельзя.
-- [ ] Если маркеров/иконок нет — смотреть лог: `feudalwars: map folder=...`, `marker refused`, `no map icon type`, `map icon refused`. Возможные причины: нет карты на сервере (readOnly), нет типа иконки на уровне (fallback на pin), игрок смотрит не туда.
-- [ ] `/editor` требует веб-слой в игре (server interfaces в опциях лаунчера). Без него — сообщение в чат. Это требование движка, не баг мода.
-- [ ] Следующий модуль по промту: лавки игроков (`CreateShop` + найм NPC-продавца). Ждёт команды «делай лавки».
-- [ ] Починить `hall.js`: кнопки promote/demote/kick шлют пустые payload (`prompt ? undefined : undefined`) — надо слать имя игрока.
-- [ ] Добавить `/build` в `HELP_MENU`? Уже есть. Проверить `/help` в игре после рестарта.
-- [ ] Меши в `BUILD_CATALOG` — пути предположительные (`tent_a.cgf`, `table_market.cgf`, `palisade_wall.cgf`, `watch_tower.cgf`), проверить через `FindMeshes` в игре или заменить на реальные из `meshes list`.
+- **Restart** — если менялся только `gamemodes/feudalwars.lua`, модули или UI. `start.sh` сам подтянет `main` при старте.
+- **Reimport egg + Restart** — если менялся `pterodactyl-egg-kcdmp-feudalwars.json` (переменные, `config.files`, install-скрипт). Reimport в Admin → Nests, затем проверить Startup-переменные сервера.
+- **Reinstall** — только если сломан рантайм/dotnet, бинарники или install-скрипт. Для смены карты/команд НЕ нужен.
+- **Смена карты** `klaster/trosecko/kutnohorsko`: Startup-переменная `LEVEL` → Restart. Из Lua карту сменить нельзя. Дефолт в egg — `kutnohorsko`.
+- **Важно про `start.sh`**: он обновляет сам себя, но новая версия применяется **со следующего рестарта**. Поэтому после смены `start.sh` нужны **два рестарта** (первый скачает и заменит скрипт, второй запустит новый).
 
-## 6. Известные ограничения API (не пытаться обойти)
+---
+
+## 4. Как работает `pterodactyl-start.sh` (версия `2026-11-24.2`)
+
+- **Без GitHub API** (он рейт-лимитит общий IP и молча пропускает обновления). Скачивает tarball с `codeload.github.com/.../tar.gz/refs/heads/main`.
+- **Манифест всей папки** `gamemodes/feudalwars/`: sha256 от (путь+содержимое каждого файла). Ловит изменение в любом модуле/UI, не только во входном файле.
+- Сравнивает: входной `feudalwars.lua` (sha256) и папку мода (манифест). Пишет в лог, что current / updated, число файлов, список модулей, число UI-файлов.
+- Retry загрузки 3 раза, потом стартует локальную сборку как есть.
+- `AUTO_UPDATE=0` отключает синхронизацию.
+- Логи с префиксом `[fw]`. Пример:
+  ```
+  [fw] Feudal Wars starter 2026-11-24.2
+  [fw] entry: gamemodes/feudalwars.lua is current (2de76793a51c)
+  [fw] mode: gamemodes/feudalwars/ is current (29 files, a4aeeebb0c3a)
+  [fw] mode: modules: build.lua core.lua economy.lua factions.lua justice.lua npc.lua social.lua ui.lua world.lua
+  [fw] mode: ui: 20 files
+  ```
+- Install-скрипт egg пишет логи с префиксом `[fw-install]`, шаги `step 1/5 … 5/5`.
+
+---
+
+## 5. Ключевые технические факты (проверены)
+
+- **`require` работает** и резолвится относительно папки скрипта. Вход `gamemodes/feudalwars.lua` → `require("feudalwars.core")` и т.д. Модули видят глобалы друг друга, могут регистрировать коллбэки. Подтверждено локальным boot-тестом.
+- **`dofile`/`loadfile` НЕ годятся** — резолвятся от cwd, не от папки скрипта.
+- **Корень старых жалоб**: на сервере НЕТ `data/combat/items.json` → каталог предметов пуст → `DefineItem`/`FindItems`/`GetItemInfo`/`GivePlayerItem("pickaxe")` не работают. Старый мод зависел от `fw_*` предметов и мешей → «кирки не появляются», «работу нельзя проверить». В логе: `items=false`.
+- **Нет данных уровня**: `data/` пуста (только `README.md`). `GetTerrainHeight`/`GetGroundZ`/`GetNavmeshHeight`/`RayCast` → nil. `HasNavmesh()=false`, `HasCollision()=false`. Высота известна только у спавна.
+- **Высота объектов**: `CreateMapObject`/`CreateProp`/`CreateActor`/`CreateAnimal`/`CreateHerb` принимают `z < 0` = «на землю» (клиент резолвит). `FW.ground()` пробует collision→navmesh→heightmap→hint.
+- **Работа = удар по реальному объекту уровня**: `OnPlayerHitScenery(pid, hit)` даёт `hit.x/y/z` (высота от клиента всегда верная), `hit.surface`, `hit.mesh`, `hit.kind`. Промысел определяется по ним (rock→quarry, tree→woods, crop→fields). Работает в ЛЮБОМ месте карты.
+- **UI-события фреймов** приходят в `OnClientEvent` (через `KcdMp.emitServer`), НЕ в `OnPlayerWebSurfaceEvent`. Фокус фрейма = `focus="open"`. Закрытие = `DestroyPlayerWebFrame` + снять фокус + `SetPlayerCursor(pid,false)`.
+- **Бинды**: F2 = меню (`fw.menu`), H = где работа (`fw.work`). F1 занят фоторежимом, E конфликтует с игрой.
+- **Кириллица**: НЕ править через PowerShell `Set-Content` (ломает кодировку + BOM). Только Node-скрипты, писать `UTF8Encoding $false`.
+- **egg JSON**: панель декодирует строгим `json_decode(JSON_THROW_ON_ERROR)`, BOM = ошибка. Качать только Raw-ссылкой, не пересохранять. Правки — через Node (`JSON.stringify`), не PowerShell.
+
+---
+
+## 6. Структура мода (v4, модульная)
+
+| Файл | Строк | Содержание |
+|---|---|---|
+| `gamemodes/feudalwars.lua` | 186 | вход: `require` модулей + `OnGameModeInit` + 15 коллбэков |
+| `gamemodes/feudalwars/core.lua` | 570 | пространство `FW`, конфиг, локализация, БД, деньги, фреймы, пробы мира |
+| `gamemodes/feudalwars/world.lua` | 372 | промыслы (зоны), люди королевства, высота, перемещение |
+| `gamemodes/feudalwars/economy.lua` | 273 | труд за удар, травы, охота, станции игры, рынок |
+| `gamemodes/feudalwars/factions.lua` | 241 | дома, войны, казна, слава, содержание |
+| `gamemodes/feudalwars/social.lua` | 129 | аккаунты, страница персонажа, `/pay`, жизненный цикл |
+| `gamemodes/feudalwars/build.lua` | 188 | зодчий, чертежи |
+| `gamemodes/feudalwars/npc.lua` | 164 | конструктор NPC + диалоги |
+| `gamemodes/feudalwars/justice.lua` | 38 | консоль короны, редактор |
+| `gamemodes/feudalwars/ui.lua` | 607 | меню, диспетчер страниц, все команды |
+
+- **Коллбэки** (15): `OnGameModeInit`, `OnPlayerConnect`, `OnPlayerDisconnect`, `OnPlayerRequestSpawn`, `OnPlayerSpawn`, `OnPlayerDeath`, `OnPlayerCraft`, `OnPlayerHitScenery`, `OnClientEvent`, `OnPlayerPickHerb`, `OnActorDeath`, `OnPlayerInteractActor`, `OnDialogueResponse`, `OnPlayerWebSurfaceEvent`, `OnPlayerKeyBinding`.
+- **Нативные механики**: травы (`OnPlayerPickHerb`), охота (`CreateAnimal`+`SetActorButcher`+`OnActorDeath`), станции игры (`SetCraftCheck`+`OnPlayerCraft` — алхимия/наковальня/точило), магазины (`CreateShop`+`SetShopItem`+`SetActorShop`+`OpenShop`), диалоги (`ShowPlayerDialogue`+`OnDialogueResponse`), карманничество (`SetPickpocketing`).
+- **Промыслы по умолчанию**: кольцо из 5 зон вокруг спавна (quarry/woods/fields/hunt/workshop). Админ переносит командой `/zone here <trade> [label]`. Зона = `CreateArea` (цилиндр) + `CreateMapIcon` + NPC-бригадир.
+- **БД** (8 таблиц): `fw_players`, `fw_houses`, `fw_members`, `fw_sites`, `fw_people`, `fw_blueprints`, `fw_lots`, `fw_skills`. Без БД всё работает в памяти (чистая деградация).
+- **Нет** папок `client/` и `sounds/` — мод их не использует.
+
+---
+
+## 7. UI (9 фреймов)
+
+`gamemodes/feudalwars/ui/ui.toml` объявляет фреймы: `me`, `hall`, `admin`, `notice`, `menu`, `auction`, `build`, `npc`, `craft`.
+
+- **События, которые мод ШЛЁТ** (`FW.push`): `me`, `hall`, `admin`, `menu`, `auction`, `build`, `npc`, `notice`.
+- **События, которые мод ОБРАБАТЫВАЕТ** (`FW.web_event`): `menu.close|cursor|lang|run`, `me.close`, `house.close|donate|prestige|declare|peace`, `auction.close|sell|buy|cancel`, `market.refresh`, `build.close|new|save|stamp|cancel`, `npc.close|action|remove|stock|place`, `admin.close|kick|ban|heal|money|tp|tphere`.
+- **Секции меню** (по `menu.js`): `main`, `world`, `work`, `house`, `trade`, `build`, `settings`. Мод раскладывает карточки по этим секциям.
+- **Известные расхождения (не баги, но долг)**:
+  - `ui.toml`-комментарии устарели: описывают старые события (`me.show`, `house.show`, `admin.show`, `menu.show {commands}`), которых код уже не шлёт.
+  - Фрейм `craft` объявлен и `craft.js` существует, но мод его **не открывает** и не шлёт `craft.*` — крафт идёт через нативные станции игры, а не через этот фрейм. Либо задействовать, либо удалить.
+
+---
+
+## 8. Команды (28 зарегистрированных)
+
+- **Игрок**: `/menu` `/help` `/me` `/money` `/pay` `/job` `/goto` `/market` `/auction` `/trade` `/house` `/hall` `/prestige` `/war` `/lang` `/commands`.
+- **Админ** (`admin=true`): `/admin` `/editor` `/build` `/arch` `/npc` `/zone` `/reload-zones` `/kick` `/ban` `/give` `/tp` `/tphere`.
+- `/commands` и `/commands admin` — списки команд (RU/EN).
+
+---
+
+## 9. Проверено / не проверено
+
+- [x] Boot-тест на .NET 10 (`KcdMp.Server.exe --gamemode gamemodes/feudalwars.lua`): 15 коллбэков, 0 ошибок, чистая деградация без БД и данных уровня.
+- [x] `require` модулей, манифест-синхронизация `start.sh` (проверено end-to-end в тестовой папке).
+- [x] Кросс-чек всех вызовов мода против `sdk/KcdMp.d.lua` — имена API существуют.
+- [ ] **В игре не проверено**: зоны промыслов (иконки/бригадиры), F2-меню, удары по объектам и оплата, травы, охота, станции, магазины, диалоги, `/zone`, `/goto`, `/editor`.
+- [ ] Меши в `FW.CATALOG` (build.lua) — пути предположительные, проверить через `FindMeshes` в игре.
+- [ ] `hall.js` кнопки promote/demote/kick — в текущем `hall.js` их нет (только donate/prestige/declare/peace); проверить, нужны ли.
+
+---
+
+## 10. Известные ограничения API (не пытаться обойти)
+
+- Нет смены карты из Lua — только `[server] level` / env `LEVEL` + рестарт.
 - Нет «призрака» для превью — превью = настоящий объект `persist=false` с автоудалением.
-- Нет смены карты из Lua — только `server.toml [server] level` / env `LEVEL` + рестарт.
-- Нет рисования на карте из Lua кроме `CreateMapIcon` (тип/icon/name) и `CreateMarker` (компас).
-- `/editor` — встроенный редактор движка, свой писать не надо.
-- Иконки карты: `type` — имя типа из `GetMapIconTypes()`; если типа нет на уровне — fallback `icon=0`.
+- Рисование на карте из Lua: только `CreateMapIcon` (тип/icon/name) и `CreateArea` (зоны). Компасных маркеров (`CreateMarker`) мод не использует.
+- `/editor` — встроенный редактор движка (`SetPlayerEditor(pid,"admin")`), требует веб-слой в игре (server interfaces в лаунчере). Свой писать не надо.
+- Иконки карты: `type` — имя типа из `GetMapIconTypes()`; если типа нет на уровне — fallback на `icon`-номер.
+- Без `data/combat/items.json` каталог предметов пуст: `DefineItem`/`FindItems`/`GetItemInfo`/`GivePlayerItem` по имени не работают. Мод это учитывает (`FW.ready()`).
 
-## 7. Ключевые файлы
-- `gamemodes/feudalwars.lua` (входной, ~180 строк): только `require` модулей + `OnGameModeInit` + все коллбэки.
-- `gamemodes/feudalwars/core.lua`: пространство `FW`, конфиг, локализация, БД, деньги, фреймы, пробы мира.
-- `gamemodes/feudalwars/world.lua`: промыслы (зоны), люди королевства, высота, перемещение.
-- `gamemodes/feudalwars/economy.lua`: труд за удар, травы, охота, станции игры, рынок.
-- `gamemodes/feudalwars/factions.lua`: дома, войны, казна, слава, содержание.
-- `gamemodes/feudalwars/social.lua`: аккаунты, страница персонажа, /pay, жизненный цикл.
-- `gamemodes/feudalwars/build.lua`: зодчий, чертежи.
-- `gamemodes/feudalwars/npc.lua`: конструктор NPC + диалоги.
-- `gamemodes/feudalwars/justice.lua`: консоль короны, редактор.
-- `gamemodes/feudalwars/ui.lua`: меню, диспетчер страниц, все команды.
-- `gamemodes/feudalwars/ui/ui.toml`: фреймы `me/hall/admin/notice/menu/auction/build/craft/npc`.
-- `pterodactyl-egg-kcdmp-feudalwars.json`: egg (STARTUP, variables, config.files, install).
-- `pterodactyl-start.sh`: автообновление + запуск.
-- `server.toml.example`: контракт `[gamemode.database]`, `[server] level`, `[world] map`.
-- `sdk/KcdMp.d.lua`: API (~13000 строк).
+---
 
-## 9. Архитектура v4 (модульный рефакторинг, 2026-11-24)
-- **`require` подтверждён практикой** (локальный boot-тест на .NET 10): резолвится относительно папки скрипта. Вход `gamemodes/feudalwars.lua` → `require("feudalwars.core")` и т.д. `dofile`/`loadfile` — от cwd, НЕ годятся. Модули видят глобалы друг друга, могут регистрировать коллбэки.
-- **Корень жалоб найден**: на сервере НЕТ `data/combat/items.json` → каталог предметов пуст → `DefineItem`/`FindItems`/`GetItemInfo`/`GivePlayerItem("pickaxe")` не работают. Старый мод зависел от `fw_*` предметов и мешей → «кирки не появляются», «работу нельзя проверить». Проверено пробами: `items=false` в логе.
-- **Новая модель работы**: удар по реальному объекту уровня (`OnPlayerHitScenery` даёт `hit.x/y/z` — высота всегда верная, клиент её знает). Промысел определяется по `hit.surface`/`hit.mesh` (rock→quarry, tree→woods, crop→fields). Работает в ЛЮБОМ месте карты, не только у спавна. Оплата за удар, навык растёт, заработок копится и сообщается раз в 12с.
-- **Нативные механики вместо костылей**: травы (`OnPlayerPickHerb`), охота (`CreateAnimal`+`SetActorButcher`+`OnActorDeath`), станции игры (`SetCraftCheck`+`OnPlayerCraft` — алхимия/наковальня/точило), магазины (`CreateShop`+`SetShopItem`+`OpenShop`), диалоги (`ShowPlayerDialogue`+`OnDialogueResponse`), карманничество (`SetPickpocketing`).
-- **Высота**: `FW.ground()` пробует collision→navmesh→heightmap→hint. Без данных уровня объекты ставятся на z игрока (там, где он стоит — верно). `CreateMapObject`/`CreateProp`/`CreateActor`/`CreateAnimal`/`CreateHerb` принимают z<0 = «на землю» (клиент резолвит).
-- **Промыслы по умолчанию**: кольцо из 5 зон вокруг спавна (quarry/woods/fields/hunt/workshop). Админ переносит их в реальные места командой `/zone here <trade> [label]`. Зона = `CreateArea` (цилиндр) + `CreateMapIcon` + NPC-бригадир.
-- **Команды**: игрок — `/menu /me /job /goto /market /house /hall /war /prestige /money /pay /lang /commands`; админ — `/admin /editor /build /arch /npc /zone /reload-zones /kick /ban /give /tp /tphere`.
-- **Бинды**: F2 = меню, H = где работа. (F1 занят фоторежимом, E конфликтует с игрой.)
-- **БД**: `fw_players/fw_houses/fw_members/fw_sites/fw_people/fw_blueprints/fw_lots/fw_skills`. Без БД всё работает в памяти (деградация чистая).
-- **Boot-тест**: `KcdMp.Server.exe --gamemode gamemodes/feudalwars.lua` на .NET 10 (runtime в `%TEMP%\kilo\dotnet\runtime`). Лог: `server.log`. 16 коллбэков, 0 ошибок.
+## 11. Ключевые файлы
 
-## 8. Лог изменений
-- `v4` (2026-11-24): ПОЛНЫЙ РЕФАКТОРИНГ НА МОДУЛИ + ПЕРЕПИСЬ НА НАТИВНЫХ МЕХАНИКАХ. Монолит 2473 строки → входной файл + 9 модулей через `require` (подтверждён boot-тестом). Работа переведена на удары по реальным объектам уровня (высота от клиента, работает везде). Найдена и обойдена корневая проблема: пустой каталог предметов (нет `data/combat/items.json`) — мод больше не зависит от `fw_*` предметов. Добавлены: травы, охота, станции игры, магазины, диалоги, карманничество, зоны промыслов с иконками/бригадирами, `/zone`, `/goto`, `/commands`. См. раздел 9.
-- `cc8d384` (2026-11-24): ПОЛНАЯ ПЕРЕРАБОТКА. (1) Ядро разрушаемых узлов: единый реестр `nodes`, HP, дроп, респаун 300с, персист в `fw_nodes` (mesh/label/is_map/mapid). (2) Работы разнесены по Kuttenberg: 2 шахты (каменоломня 2870/2960, штрек 3130/800), 2 поля (1520/1990, 3060/770), 2 леса (660/3260, 1740/2810); z из `GetTerrainHeight`. (3) Зодчий: NPC «Master Builder Havel» у спавна + `/arch new|save|stamp|list|cancel`; черновик из реальных map-объектов, камень бьётся и даёт руду, сохранение в `fw_blueprints`, тиражирование куда угодно с рабочими узлами. (4) UI: двухпанельное меню (rail: Обзор/Мир/Работа/Дом/Торг/Стройка/Настройки) + карточки, полный редизайн CSS, новый build-фрейм. (5) Исправлены баги порядка объявлений: `isAdmin`, `close_frame`, `lang_of`, `arch_open`, `bp_load_all`, `db`, `fmt`, `earn`, `save_money`, `job_skill_*` — все форвард-декларированы (иначе nil при вызове).
-- `2aeedc7` (2026-11-24): ресурсы уголь/железо/серебро/золото/камень/дерево/зерно (DefineItem fw_*, взвешенный дроп, в сумку), аукцион с UI (лоты в БД, продажа/покупка/снятие без чата), стройка только админам через визуальное меню (без грошей), все кнопки меню делают действие через UI (menu_do), каталог стройки RU/EN.
-- `8dc95d0` (2026-11-24): immersive работ: удар по жиле оружием в руках (OnPlayerHitScenery), проверка инструмента (кирка/молот/топор/серп), эффекты+звук при ударе, осколки-пикапы, жила-валун с истощением и респауном, `/job kit` выдача инструмента, НИЧЕГО не блокируется (E только подсказка, F убран, таймеров смен нет).
-- `9b913e1` (2026-11-24): продакшн работ: реальные типы иконок (troskyQuarry/miller/camp + icon numbers), пропсы на точках (бочки/ящики/костёр/наковальня), `/jobsite <id|new> <kind>` для привязки к реальным местам, E по site id + диагностика в лог, команды в меню НЕ переводятся (только названия/описания), все фреймы me/hall/admin/menu RU/EN + редизайн, каталог стройки на реальных мешах.
-- `5cafb37` (2026-11-24): полная сверка UI: `rm -rf gamemodes/feudalwars` + точная копия из гита при каждом обновлении (сносит вложенность от старого cp-бага и stale-файлы), плюс diff-отчёт disk-vs-git в лог. То же в install-скрипте egg.
-- `f7017b3` (2026-11-24): БАГ: `cp -rf feudalwars /mnt/server/gamemodes/` при существующей папке кладёт `feudalwars/feudalwars/` (вложенность) — сервер отдавал старый UI. Исправлено на `feudalwars/.`. Юзер: меню не закрывается, редизайна нет — сервер крутит старый UI.
-- `5102786` (2026-11-24): БАГ: `web_event` была `local` после `OnClientEvent` → кнопки меню слали события в nil (закрытие/Run мертвы). Починен порядок. Меню-хаб: русские названия + описания, кнопка Настройки с выбором EN/RU (`/lang`, `menu.lang`), редизайн в стиле KCD (сургучная печать, золото, пергамент).
-- 2026-11-24: реинсталл прошёл после Restart (Wings подхватил обновлённый egg). Карта/меню/фокус — проверять в игре: F2 меню, E/F работы, `feudalwars on kutnohorsko` в логе.
-- `a8a0c4e` (2026-11-24): egg install: `cp start.sh` перенесён ДО `rm -rf tmp/main` (скрипт копировался из уже удалённой папки → `cannot stat .../pterodactyl-start.sh`). Ошибка вылезла при реинсталле.
-- `e1db2fd` (2026-11-24): egg JSON: убран BOM (PowerShell записал файл с BOM, панельный json_decode с JSON_THROW_ON_ERROR его не принимает → Syntax error при реимпорте). Качать egg только кнопкой Download/GitHub Raw без пересохранения.
-- `e35c2bd` (2026-11-24): install-скрипт: дефолт `level` klaster→kutnohorsko; start.sh пишет диагностику LEVEL env + level до/после. Юзер: браузер показывает Sedletz Monastery после реимпорта + LEVEL=kutnohorsko + рестарта.
-- `e5dc913` (2026-11-24): LEVEL enforce перенесён ДО update-check (иначе новый start.sh применялся только со 2-го рестарта). Юзер видит Sedletz Monastery (klaster) в браузере несмотря на LEVEL=kutnohorsko в Startup.
-- `b94c63c` (2026-11-24): focus=open у всех фреймов (клавиатура сразу, без клика), авто-курсор при открытии, закрытие через DestroyPlayerWebFrame + снятие фокуса, кнопка Free the mouse в меню.
-- `8a4bddc` (2026-11-24): start.sh принудительно прописывает `level = "$LEVEL"` в server.toml (Wings иногда не переписывает его из Startup-переменной).
-- `a6a2de5` (2026-11-24): главное меню на F2 (F1 занят фоторежимом), меню-хаб с кнопками Character/House hall/Crown's console, убраны отдельные бинды F2-F4.
-- `e223763` (2026-11-24): UI events via OnClientEvent (emitServer!), key bindings E/F/F1-F4, action hints, menu frame, editor web check, marker diagnostics, Esc closes frames, SetPlayerWebFocus on open.
-- `1837202` (2026-11-24): visible job sites, /help, /goto, /build preview, /editor, kutnohorsko default.
-- `1a95abb` (2026-11-24): jobs module (mine/farm/forest, stock, skills, /job, db).
-- `bb0f70d` и ранее: 0.51.1 бинарники, ShowPlayerWebFrame фикс, start.sh автообновление.
+- `gamemodes/feudalwars.lua` + `gamemodes/feudalwars/*.lua` — мод (см. §6).
+- `gamemodes/feudalwars/ui/` — фреймы + `feudalwars.css` (пергамент/сургуч) + `ui.toml`.
+- `pterodactyl-start.sh` — синхронизация (codeload + манифест), LEVEL enforce, `[world] map` enforce, запуск.
+- `pterodactyl-egg-kcdmp-feudalwars.json` — egg (STARTUP, variables, config.files, install).
+- `server.toml.example` — контракт `[gamemode.database]`, `[server] level`, `[world] map` и др.
+- `data/README.md` — инструкция по экспорту данных уровня.
+- `sdk/KcdMp.d.lua` — API (~13000 строк).
+- `README.md` — **устарел** (описывает старые `/farm`, `/craft`, `panel.json`). Требует переписи.
+
+---
+
+## 12. Лог изменений (новые сверху)
+
+- `e569d2c` (2026-11-24): `start.sh` + egg: честные логи деплоя и проверка всей папки мода. Манифест `gamemodes/feudalwars/` (путь+содержимое каждого файла) вместо сравнения только входного файла; retry загрузки; баннер с версией; install-скрипт egg с шагами `step 1/5…5/5`. Правки egg — через Node (без BOM).
+- `2624c48` (2026-11-24): **v4 — полный рефакторинг на модули + перепись на нативных механиках.** Монолит 2473 строки → вход + 9 модулей через `require`. Работа переведена на удары по реальным объектам уровня. Найдена и обойдена корневая проблема: пустой каталог предметов (нет `data/combat/items.json`). Добавлены травы, охота, станции игры, магазины, диалоги, карманничество, зоны промыслов, `/zone`, `/goto`, `/commands`.
+- `a132fce` (2026-11-24): NPC неуязвимы + страница на каждого NPC, редизайн UI (пергамент/сургуч, CSS-текстуры).
+- `5d36a07` (2026-11-24): `start.sh` включает `[world] map` в server.toml, если его нет (без реинсталла).
+- `59ea32d` (2026-11-24): `[world] map` в egg (CreateMapObject отказывал), реальные меши игры, `OnPlayerInteractActor` для NPC, список `/commands`.
+- `5b381b9` (2026-11-24): синхронизация без GitHub API (codeload + sha256), egg: одна загрузка, server.toml сохраняется при реинсталле.
+- `7217131` (2026-11-24): чистка только плановых узлов работ (чертёжные валуны остаются), компасных маркеров нет.
+- `3c48e02` (2026-11-24): узлы как map-объекты на земле (z<0 авто-снап), чистка устаревших строк site/node, фикс битой кириллицы, убраны E-подсказки.
+- `791fea6` (2026-11-24): конструктор NPC: таблица `fw_npcs`, `/npc add|list|remove`, торговцы со stock+ценами, админ-фрейм, персист.
+- `5b7c57d` (2026-11-24): убран бинд E (блокировал подбор), нет компасных кругов, ground snap через navmesh, реальные меши через `FindMeshes`, RU-чат для работ.
+- `e207052` (2026-11-24): `MENU_TEXT` форвард-декларирован (был nil → меню мертво), восстановлены кириллические тексты меню.
+- `cc8d384` (2026-11-24): ядро разрушаемых узлов, работы по Kuttenberg, зодчий (NPC + `/arch`), двухпанельное меню, редизайн CSS.
+- `2aeedc7` (2026-11-24): ресурсы (DefineItem fw_*), аукцион с UI, стройка только админам, действия меню через UI.
+- `8dc95d0` (2026-11-24): immersive работ (удар по жиле, проверка инструмента, эффекты/звук, `/job kit`).
+- `9b913e1` (2026-11-24): реальные типы иконок, пропсы на точках, `/jobsite`, все фреймы RU/EN.
+- `5cafb37` (2026-11-24): полная сверка UI (`rm -rf` + точная копия из гита при каждом обновлении).
+- `f7017b3` (2026-11-24): БАГ вложенности `cp -rf feudalwars` → `feudalwars/feudalwars/`; исправлено на `feudalwars/.`.
+- `5102786` (2026-11-24): БАГ `web_event` была `local` после `OnClientEvent` → кнопки меню мертвы.
+- `a8a0c4e` (2026-11-24): egg install: `cp start.sh` перенесён ДО `rm -rf tmp/main`.
+- `e1db2fd` (2026-11-24): egg JSON: убран BOM (панельный `json_decode` его не принимает).
+- `e35c2bd` (2026-11-24): install-скрипт: дефолт `level` klaster→kutnohorsko.
+- `e5dc913` (2026-11-24): LEVEL enforce перенесён ДО update-check.
+- `b94c63c` (2026-11-24): `focus=open` у всех фреймов, авто-курсор, закрытие через `DestroyPlayerWebFrame`.
+- `8a4bddc` (2026-11-24): `start.sh` принудительно прописывает `level` в server.toml.
+- `a6a2de5` (2026-11-24): главное меню на F2 (F1 занят фоторежимом).
+- `e223763` (2026-11-24): UI-события через `OnClientEvent` (emitServer), бинды, action hints, меню-фрейм.
+- `1837202` (2026-11-24): видимые точки работ, `/help`, `/goto`, `/build` preview, `/editor`, дефолт kutnohorsko.
+- `1a95abb` (2026-11-24): модуль работ v1 (mine/farm/forest, stock, skills, `/job`, db).
+- `bb0f70d` и ранее: бинарники 0.51.1, фикс `ShowPlayerWebFrame`, автообновление `start.sh`.

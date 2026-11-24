@@ -65,8 +65,12 @@ function FW.menu_do(pid, action)
   action = tostring(action or "")
   if action == "menu" then FW.menu_panel(pid) return end
   if action == "me" then FW.close_frame(pid, "menu") FW.me_panel(pid) return end
-  if action == "trade" then FW.close_frame(pid, "menu") FW.market_open(pid) return end
-  if action == "house" then
+  if action == "trade" or action == "auction" or action == "market" then
+    FW.close_frame(pid, "menu")
+    FW.market_open(pid)
+    return
+  end
+  if action == "house" or action == "hall" then
     FW.close_frame(pid, "menu")
     FW.house_panel(pid)
     return
