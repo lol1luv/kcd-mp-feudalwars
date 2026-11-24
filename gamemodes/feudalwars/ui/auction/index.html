@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feudal Wars</title>
+<link rel="stylesheet" href="../feudalwars.css">
+</head>
+<body>
+<section class="window" aria-label="Auction">
+  <header>
+    <div class="crest">⚖</div>
+    <h1 id="title">Auction</h1>
+    <button class="close" id="close" type="button" aria-label="Close">&times;</button>
+  </header>
+  <div id="body">
+    <p class="lead" id="lead"></p>
+    <h2 id="lots-h"></h2>
+    <table id="lots"><thead><tr><th>#</th><th id="th-res"></th><th id="th-amount"></th><th id="th-price"></th><th id="th-seller"></th><th></th></tr></thead><tbody></tbody></table>
+    <h2 id="sell-h"></h2>
+    <table id="bag"><thead><tr><th id="th-bag-res"></th><th id="th-have"></th><th id="th-bag-amount"></th><th id="th-bag-price"></th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+  <footer id="purse"></footer>
+</section>
+<script src="auction.js"></script>
+</body>
+</html>

@@ -38,7 +38,7 @@
       const btn = document.createElement("button");
       btn.className = "act";
       btn.textContent = data.btn_open || "Open";
-      btn.addEventListener("click", () => KcdMp.emitServer("menu.run", { cmd: c.cmd }));
+      btn.addEventListener("click", () => KcdMp.emitServer("menu.run", { action: c.action || c.cmd, cmd: c.cmd }));
       td3.append(btn);
       tr.append(td1, td2, td3);
       tbody.append(tr);
@@ -49,9 +49,9 @@
   $("close").addEventListener("click", () => KcdMp.emitServer("menu.close"));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") KcdMp.emitServer("menu.close"); });
   $("cursor").addEventListener("click", () => KcdMp.emitServer("menu.cursor"));
-  $("go-me").addEventListener("click", () => KcdMp.emitServer("menu.run", { cmd: "/me" }));
-  $("go-hall").addEventListener("click", () => KcdMp.emitServer("menu.run", { cmd: "/hall" }));
-  $("go-admin").addEventListener("click", () => KcdMp.emitServer("menu.run", { cmd: "/admin" }));
+  $("go-me").addEventListener("click", () => KcdMp.emitServer("menu.run", { action: "me" }));
+  $("go-hall").addEventListener("click", () => KcdMp.emitServer("menu.run", { action: "hall" }));
+  $("go-admin").addEventListener("click", () => KcdMp.emitServer("menu.run", { action: "admin" }));
   $("go-settings").addEventListener("click", () => show("settings"));
   $("settings-back").addEventListener("click", () => show("main"));
   $("lang-en").addEventListener("click", () => KcdMp.emitServer("menu.lang", { lang: "en" }));

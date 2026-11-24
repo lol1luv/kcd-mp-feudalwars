@@ -44,3 +44,21 @@ preload = true
 z = 300
 focus = "open"
 events_out = ["menu.*"]
+
+# The auction: lots of resources, your bag, sell and buy without the chat.
+# The mode sends auction.show {lots, bag, money, lang}; the page sends auction.* events.
+[frames.auction]
+page = "auction/index.html"
+preload = true
+z = 315
+focus = "open"
+events_out = ["auction.*"]
+
+# The builder (admins): the catalogue of ready structures with a preview.
+# The mode sends build.show {structures, lang}; the page sends build.* events.
+[frames.build]
+page = "build/index.html"
+preload = true
+z = 315
+focus = "open"
+events_out = ["build.*"]

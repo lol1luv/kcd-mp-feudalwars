@@ -37,49 +37,61 @@ local ECONOMY = {
 -- Work = hit the vein with the right tool in your hands. No buttons are locked,
 -- no timers block combat: every swing on the vein's rock/tree/soil counts.
 -- E on the site only tells you what tool to hold and how the vein stands.
+-- Resources: the vein gives real items (weight + price from the base game item),
+-- with rare drops. Coal/iron are common, silver/gold are rare. Sell them at the auction.
+local RES = {
+  coal  = { base = "charcoal", name = { en = "Coal", ru = "Уголь" }, price = 4 },
+  iron  = { base = "iron", name = { en = "Iron ore", ru = "Железная руда" }, price = 8 },
+  silver = { base = "silver", name = { en = "Silver ore", ru = "Серебряная руда" }, price = 25 },
+  gold  = { base = "gold", name = { en = "Gold ore", ru = "Золотая руда" }, price = 60 },
+  stone = { base = "stone", name = { en = "Stone", ru = "Камень" }, price = 2 },
+  wood  = { base = "wood", name = { en = "Timber", ru = "Бревно" }, price = 3 },
+  grain = { base = "grain", name = { en = "Grain", ru = "Зерно" }, price = 2 },
+}
+
 local JOBS = {
   mine = {
-    label = "the mine", skill = "mining", unit = "ore",
+    label = "the mine", skill = "mining",
     stock_max = 50, hits_per_unit = 5,
-    pay = 6, skill_pay_bonus = 1,
+    pay = 2, skill_pay_bonus = 1,
     icon = "troskyQuarry", icon_num = 48,
     tools = { "pickaxe", "hammer", "normalHammer", "shovel" },
     tool_names = "a pickaxe, hammer or shovel",
     vein_mesh = "objects/natural/rocks/boulder_granite_a.cgf",
     hit_effect = "collisions.rock_hit",
     hit_sound = "special_blacksmith_hammer_anvil",
-    chunk_item = "stone",
+    drops = { { res = "stone", w = 45 }, { res = "coal", w = 30 }, { res = "iron", w = 18 }, { res = "silver", w = 5 }, { res = "gold", w = 2 } },
     props = {
       "objects/manmade/common_furniture/barrels/barrel_a.cgf",
       "objects/manmade/common_furniture/crates/crate_box_a.cgf",
     },
   },
   farm = {
-    label = "the field", skill = "farming", unit = "sheaf",
+    label = "the field", skill = "farming",
     stock_max = 60, hits_per_unit = 3,
-    pay = 5, skill_pay_bonus = 1,
+    pay = 2, skill_pay_bonus = 1,
     icon = "miller", icon_num = 21,
     tools = { "shovel", "hoe", "sickle", "scythe" },
     tool_names = "a shovel, hoe or sickle",
     vein_mesh = "objects/manmade/common_furniture/crates/crate_low_a.cgf",
     hit_effect = "collisions.dirt_hit",
     hit_sound = "special_digging",
-    chunk_item = "grain",
+    drops = { { res = "grain", w = 100 } },
     props = {
       "objects/manmade/common_furniture/barrels/barrel_b.cgf",
     },
   },
   forest = {
-    label = "the logging camp", skill = "woodcutting", unit = "log",
+    label = "the logging camp", skill = "woodcutting",
     stock_max = 40, hits_per_unit = 4,
-    pay = 5, skill_pay_bonus = 1,
+    pay = 2, skill_pay_bonus = 1,
     icon = "camp", icon_num = 38,
     tools = { "lumberjack_axe", "axe", "woodaxe", "hatchet" },
     tool_names = "a woodcutter's axe",
     vein_mesh = "objects/natural/trees/oak/oak_trunk_a.cgf",
     hit_effect = "collisions.wood_hit",
     hit_sound = "special_wood_chop",
-    chunk_item = "wood",
+    drops = { { res = "wood", w = 100 } },
     props = {
       "objects/manmade/common_furniture/crates/crate_box_b.cgf",
       "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
@@ -190,20 +202,25 @@ local function job_on_hit(pid, hit)
     if db then
       db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = best.stock, i = best.id }, function() end)
     end
-    -- the rock bursts: a chunk pickup at your feet + pay
-    pcall(CreatePickup, def.chunk_item, hit.x, hit.y + 0.3, hit.z, 0, 0)
+    -- the vein bursts: a weighted resource drop into your bag + small wage
+    local drop = job_roll_drop(def)
+    local rdef = RES[drop]
+    if rdef then
+      GivePlayerItem(pid, "fw_" .. drop, 1)
+      SendClientMessage(pid, COLOR_YELLOW, fmt("a lump of %s breaks off.", rdef.name[lang_of(pid)] or rdef.name.en))
+    end
     local skill = job_skill_of(pid, def.skill)
     local pay = def.pay + skill * def.skill_pay_bonus
     local total = skill + 1
     if total >= 10 and total % 10 == 0 then
       local nl = job_skill_up(pid, def.skill)
-      SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d: +%d per %s.", def.skill, nl, def.skill_pay_bonus, def.unit))
+      SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d: +%d wage.", def.skill, nl, def.skill_pay_bonus))
     else
       job_skill_up(pid, def.skill)
     end
     earn(pid, pay)
     save_money(pid)
-    SendClientMessage(pid, COLOR_SERVER, fmt("+1 %s, +%d groschen (%s %d left).", def.unit, pay, def.label, best.stock))
+    SendClientMessage(pid, COLOR_SERVER, fmt("+%d groschen wage (%s %d left).", pay, def.label, best.stock))
     if best.stock <= 0 then
       SendClientMessage(pid, COLOR_YELLOW, fmt("%s is worked out - come back later.", def.label))
       if best.vein then pcall(DestroyEntity, best.vein) best.vein = nil end
@@ -211,6 +228,18 @@ local function job_on_hit(pid, hit)
   else
     SendClientMessage(pid, COLOR_SERVER, fmt("crack... (%d/%d)", best.hits, need))
   end
+end
+
+-- weighted resource roll for a vein burst
+function job_roll_drop(def)
+  local total = 0
+  for _, d in ipairs(def.drops or {}) do total = total + (d.w or 1) end
+  local r = math.random() * total
+  for _, d in ipairs(def.drops or {}) do
+    r = r - (d.w or 1)
+    if r <= 0 then return d.res end
+  end
+  return (def.drops or {})[1] and def.drops[1].res or "stone"
 end
 
 local function job_status(pid)
@@ -397,10 +426,67 @@ local function open_admin(pid)
   SendPlayerWebMessage(pid, "admin", { lang = lang_of(pid), players = players, log = adminLog })
 end
 
+-- ---------------------------------------------------------------- auction
+
+local auction_lots = {}  -- id -> { id, seller, res, amount, price }
+local auction_next = 1
+
+local function auction_list_for(pid)
+  local lang = lang_of(pid)
+  local lots = {}
+  for id, lot in pairs(auction_lots) do
+    local rdef = RES[lot.res]
+    lots[#lots + 1] = {
+      id = id, seller = lot.seller, res = lot.res,
+      res_name = rdef and (rdef.name[lang] or rdef.name.en) or lot.res,
+      amount = lot.amount, price = lot.price,
+      mine = lot.seller == (accounts[pid] and accounts[pid].name),
+    }
+  end
+  table.sort(lots, function(a, b) return a.id < b.id end)
+  return lots
+end
+
+local function auction_bag_of(pid)
+  local bag = {}
+  for _, it in ipairs(GetPlayerInventory(pid) or {}) do
+    bag[it.class or it.item or ""] = (it.amount or 1)
+  end
+  return bag
+end
+
+local function open_auction(pid)
+  open_frame(pid, "auction")
+  local lang = lang_of(pid)
+  local bag = {}
+  for res, rdef in pairs(RES) do
+    bag[#bag + 1] = { res = res, name = rdef.name[lang] or rdef.name.en, have = 0 }
+  end
+  for _, it in ipairs(GetPlayerInventory(pid) or {}) do
+    local cls = tostring(it.class or it.item or "")
+    if cls:sub(1, 3) == "fw_" then
+      local res = cls:sub(4)
+      for _, b in ipairs(bag) do
+        if b.res == res then b.have = b.have + (it.amount or 1) end
+      end
+    end
+  end
+  SendPlayerWebMessage(pid, "auction", {
+    lang = lang, lots = auction_list_for(pid), bag = bag,
+    money = GetPlayerMoney(pid),
+  })
+end
+
 -- ---------------------------------------------------------------- lifecycle
 
 function OnGameModeInit()
   Log("feudalwars on " .. GetLevel() .. ": houses, wars, economy, ui" .. (db and ", database" or ", memory only"))
+
+  -- resource items: our names on the game's bases (weight/price come along)
+  for res, rdef in pairs(RES) do
+    local ok, err = DefineItem("fw_" .. res, { base = rdef.base, name = rdef.name.en, price = rdef.price })
+    if not ok then Log(fmt("feudalwars: resource %s not defined: %s (base '%s'?)", res, tostring(err), rdef.base)) end
+  end
 
   if db then
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS players (name VARCHAR(32) PRIMARY KEY, money INT NOT NULL DEFAULT 0)")
@@ -427,6 +513,15 @@ function OnGameModeInit()
     end
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_sites (id VARCHAR(32) PRIMARY KEY, kind VARCHAR(16) NOT NULL DEFAULT 'mine', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, stock INT NOT NULL DEFAULT 0)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_skills (player VARCHAR(32), skill VARCHAR(16), level INT NOT NULL DEFAULT 0, PRIMARY KEY (player, skill))")
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS auction (id INT AUTO_INCREMENT PRIMARY KEY, seller VARCHAR(32), res VARCHAR(16), amount INT NOT NULL DEFAULT 1, price INT NOT NULL DEFAULT 1)")
+    local arows = db:QuerySync("SELECT id, seller, res, amount, price FROM auction")
+    if arows then
+      for _, r in ipairs(arows) do
+        auction_lots[r.id] = { id = r.id, seller = r.seller, res = r.res, amount = r.amount, price = r.price }
+        if r.id >= auction_next then auction_next = r.id + 1 end
+      end
+      Log("feudalwars: loaded " .. #arows .. " auction lot(s)")
+    end
     local srows = db:QuerySync("SELECT id, kind, x, y, z, stock FROM job_sites")
     if srows then
       for _, r in ipairs(srows) do
@@ -898,24 +993,18 @@ local STR = {
   },
 }
 
--- Commands NEVER translate (typed in chat as-is). Only titles and descriptions localize.
+-- Menu actions: every button does the thing through UI, never sends you to the chat.
+-- action: frame to open. Commands stay untranslated (typed as-is); titles/descs localize.
 local HELP_MENU = {
-  { cmd = "/me", title = { en = "My character", ru = "Мой персонаж" }, desc = { en = "purse, house, standing", ru = "кошелёк, дом, положение" } },
-  { cmd = "/hall", title = { en = "House hall", ru = "Зал дома" }, desc = { en = "roster, treasury, wars", ru = "люди, казна, войны" } },
-  { cmd = "/house create|join|leave|list|info", title = { en = "House", ru = "Дом" }, desc = { en = "found, join or leave a house", ru = "создать дом, вступить, уйти, список" } },
-  { cmd = "/war declare|peace|status", title = { en = "War", ru = "Война" }, desc = { en = "declare war, sue for peace, check the score", ru = "объявить войну, заключить мир, счёт" } },
-  { cmd = "/job mine|farm|forest", title = { en = "Work a site", ru = "Работать" }, desc = { en = "start a shift at the mine, field or logging camp", ru = "начать смену на шахте, поле или лесопилке" } },
-  { cmd = "/job done", title = { en = "Collect the shift", ru = "Забрать смену" }, desc = { en = "finish the shift and get paid", ru = "закончить смену и получить плату" } },
-  { cmd = "/job skills", title = { en = "Work skills", ru = "Навыки" }, desc = { en = "your mining, farming, woodcutting levels", ru = "уровни горного дела, поля, лесорубки" } },
-  { cmd = "/goto mine|farm|forest|spawn", title = { en = "Go to a site", ru = "Идти к месту" }, desc = { en = "walk to a work site or the spawn", ru = "перейти к работе или на площадь" } },
-  { cmd = "/jobsite <id|new> <kind>", title = { en = "Map a site (admins)", ru = "Поставить точку (админы)" }, desc = { en = "bind a work site to this place", ru = "привязать работу к этому месту" } },
-  { cmd = "/money", title = { en = "Purse", ru = "Кошелёк" }, desc = { en = "count your groschen", ru = "сколько грошей" } },
-  { cmd = "/pay <player> <amount>", title = { en = "Pay", ru = "Заплатить" }, desc = { en = "pay another player (5% house tax)", ru = "передать гроши (налог дому 5%)" } },
-  { cmd = "/prestige info|raise", title = { en = "Prestige", ru = "Престиж" }, desc = { en = "the house's standing", ru = "положение дома" } },
-  { cmd = "/build list|place|cancel", title = { en = "Build", ru = "Стройка" }, desc = { en = "raise a ready structure with a preview", ru = "построить готовое здание с предпросмотром" } },
-  { cmd = "/editor", title = { en = "Map editor (admins)", ru = "Редактор карты (админы)" }, desc = { en = "the game's own editor: fly, place meshes", ru = "встроенный редактор: полёт, объекты" } },
-  { cmd = "/lang en|ru", title = { en = "Language", ru = "Язык" }, desc = { en = "switch the menu language", ru = "сменить язык меню" } },
-  { cmd = "/admin", title = { en = "Crown's console (admins)", ru = "Совет короны (админы)" }, desc = { en = "players, kick, ban, money", ru = "игроки, кик, бан, деньги" } },
+  { action = "me", cmd = "/me", title = { en = "My character", ru = "Мой персонаж" }, desc = { en = "purse, house, standing", ru = "кошелёк, дом, положение" } },
+  { action = "hall", cmd = "/hall", title = { en = "House hall", ru = "Зал дома" }, desc = { en = "roster, treasury, wars", ru = "люди, казна, войны" } },
+  { action = "auction", cmd = "/auction", title = { en = "Auction", ru = "Торг" }, desc = { en = "sell resources, buy from others", ru = "продать ресурсы, купить у других" } },
+  { action = "job", cmd = "/job", title = { en = "Work", ru = "Работа" }, desc = { en = "strike the vein with the tool in your hands", ru = "бей жилу инструментом в руках" } },
+  { action = "goto", cmd = "/goto", title = { en = "Go to a site", ru = "Идти к месту" }, desc = { en = "walk to a work site or the spawn", ru = "перейти к работе или на площадь" } },
+  { action = "build", cmd = "/build", title = { en = "Build (admins)", ru = "Стройка (админы)" }, desc = { en = "raise a ready structure with a preview", ru = "построить готовое здание с предпросмотром" } },
+  { action = "editor", cmd = "/editor", title = { en = "Map editor (admins)", ru = "Редактор карты (админы)" }, desc = { en = "the game's own editor: fly, place meshes", ru = "встроенный редактор: полёт, объекты" } },
+  { action = "lang", cmd = "/lang", title = { en = "Language", ru = "Язык" }, desc = { en = "switch the menu language", ru = "сменить язык меню" } },
+  { action = "admin", cmd = "/admin", title = { en = "Crown's console (admins)", ru = "Совет короны (админы)" }, desc = { en = "players, kick, ban, money", ru = "игроки, кик, бан, деньги" } },
 }
 
 local function lang_of(pid) return player_lang[pid] or "en" end
@@ -926,7 +1015,7 @@ local function open_menu(pid)
   local lang = lang_of(pid)
   local cmds = {}
   for _, h in ipairs(HELP_MENU) do
-    cmds[#cmds + 1] = { cmd = h.cmd, title = h.title[lang] or h.title.en, desc = h.desc[lang] or h.desc.en }
+    cmds[#cmds + 1] = { action = h.action, cmd = h.cmd, title = h.title[lang] or h.title.en, desc = h.desc[lang] or h.desc.en }
   end
   local s = STR[lang] or STR.en
   SendPlayerWebMessage(pid, "menu", {
@@ -938,6 +1027,29 @@ local function open_menu(pid)
     settings_title = s.settings_title, settings_lang = s.settings_lang,
     settings_back = s.settings_back,
   })
+end
+
+-- menu buttons act through UI: open the frame, never send you to the chat
+local function menu_do(pid, action)
+  close_frame(pid, "menu")
+  if action == "me" then open_me(pid)
+  elseif action == "hall" then
+    if playerHouse[pid] then open_hall(pid)
+    else SendClientMessage(pid, COLOR_RED, "you serve no lord - ask a house to take you in.") end
+  elseif action == "auction" then open_auction(pid)
+  elseif action == "job" then job_status(pid)
+  elseif action == "goto" then
+    local sp = GetSpawnPoints("town")[1]
+    if sp then SetPlayerPos(pid, sp.x + 2.0, sp.y, sp.z, 0) end
+  elseif action == "build" then open_build(pid)
+  elseif action == "editor" then
+    if isAdmin(pid) then
+      if IsPlayerWebReady(pid) then SetPlayerEditor(pid, "admin")
+      else SendClientMessage(pid, COLOR_RED, "the editor needs the web layer: enable server interfaces in the launcher options and relog.") end
+    end
+  elseif action == "lang" then open_menu(pid)
+  elseif action == "admin" then if isAdmin(pid) then open_admin(pid) end
+  end
 end
 
 RegisterCommand("lang", function(pid, args)
@@ -1061,33 +1173,33 @@ end, { help = "travel to a player", params = "<player>", admin = true, secret = 
 
 local BUILD_CATALOG = {
   tent = {
-    label = "a campaign tent", cost = 200,
+    label = { en = "Campaign tent", ru = "Походная палатка" }, cost = 0,
     parts = { "objects/manmade/structures/living/tents/tent_big_fancy_a.cgf" },
   },
   stall = {
-    label = "a market stall", cost = 500,
+    label = { en = "Market stall", ru = "Торговая лавка" }, cost = 0,
     parts = {
       "objects/manmade/task_specific_props/trade/merge_market_bread_stand.cgf",
       "objects/manmade/common_furniture/barrels/barrel_a.cgf",
     },
   },
   camp = {
-    label = "a campfire", cost = 150,
+    label = { en = "Campfire", ru = "Костёр" }, cost = 0,
     parts = {
       "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
       "objects/manmade/common_furniture/crates/crate_low_a.cgf",
     },
   },
   palisade = {
-    label = "a palisade wall", cost = 800,
+    label = { en = "Palisade wall", ru = "Частокол" }, cost = 0,
     parts = { "objects/manmade/structures/defensive/walls/palisade/palisade_wall_a_v1.cgf" },
   },
   tower = {
-    label = "a watch tower", cost = 2000,
+    label = { en = "Watch tower", ru = "Сторожевая башня" }, cost = 0,
     parts = { "objects/manmade/structures/defensive/castles/unique/trosky/panna_wooden_tower.cgf" },
   },
   forge = {
-    label = "a field forge", cost = 1200,
+    label = { en = "Field forge", ru = "Полевая кузня" }, cost = 0,
     parts = {
       "objects/manmade/task_specific_props/metal_industry/smithing/anvil.cgf",
       "objects/manmade/task_specific_props/metal_industry/smithing/forge_small_a.cgf",
@@ -1104,32 +1216,26 @@ local function build_cancel(pid, silent)
   if not silent then SendClientMessage(pid, COLOR_SERVER, "the builders stand down.") end
 end
 
-RegisterCommand("build", function(pid, args)
-  local verb, rest = args:match("^(%S*)%s*(.-)$")
-  verb = (verb or ""):lower()
-  if verb == "list" or verb == "" then
-    SendClientMessage(pid, COLOR_YELLOW, "Ready structures (the preview stands 60 seconds):")
-    for key, b in pairs(BUILD_CATALOG) do
-      SendClientMessage(pid, COLOR_SERVER, fmt("/build place %s - %s (%d groschen)", key, b.label, b.cost))
-    end
-    SendClientMessage(pid, COLOR_SERVER, "or open the map editor by hand: /editor")
+local function open_build(pid)
+  if not isAdmin(pid) then
+    SendClientMessage(pid, COLOR_RED, "only the crown's servants may raise structures.")
     return
   end
-  if verb == "cancel" then build_cancel(pid) return end
-  if verb ~= "place" then
-    SendClientMessage(pid, COLOR_RED, "usage: /build [list|place <name>|cancel]")
-    return
+  open_frame(pid, "build")
+  local lang = lang_of(pid)
+  local list = {}
+  for key, b in pairs(BUILD_CATALOG) do
+    list[#list + 1] = { key = key, label = b.label[lang] or b.label.en, cost = b.cost }
   end
-  local name = (rest:match("^(%S*)") or ""):lower()
+  table.sort(list, function(a, b) return a.cost < b.cost end)
+  SendPlayerWebMessage(pid, "build", { lang = lang, structures = list })
+end
+
+local function build_place(pid, name)
+  if not isAdmin(pid) then return end
+  name = (name or ""):lower()
   local spec = BUILD_CATALOG[name]
-  if not spec then
-    SendClientMessage(pid, COLOR_RED, "no such structure - /build list for the catalogue.")
-    return
-  end
-  if GetPlayerMoney(pid) < spec.cost then
-    SendClientMessage(pid, COLOR_RED, fmt("%s costs %d groschen.", spec.label, spec.cost))
-    return
-  end
+  if not spec then return end
   build_cancel(pid, true)
   local px, py, pz = GetPlayerPos(pid)
   local yaw = GetPlayerYaw(pid)
@@ -1143,12 +1249,15 @@ RegisterCommand("build", function(pid, args)
     SendClientMessage(pid, COLOR_RED, "the ground refuses the builders here (no map, or a wrong mesh path).")
     return
   end
-  GivePlayerMoney(pid, -spec.cost)
-  save_money(pid)
-  SendClientMessage(pid, COLOR_YELLOW, fmt("%s rises before you - a preview for 60 seconds. /build place again to keep it, /build cancel to tear it down.", spec.label))
+  SendClientMessage(pid, COLOR_YELLOW, "it rises before you - a preview for 60 seconds.")
   local t = SetTimer(function() build_cancel(pid) end, 60000, false)
   build_preview[pid] = { name = name, ids = ids, timer = t }
-end, { help = "raise a ready structure with a preview", params = "[list|place <name>|cancel]" })
+  open_build(pid)
+end
+
+RegisterCommand("build", function(pid)
+  open_build(pid)
+end, { help = "raise a ready structure (admins)" })
 
 RegisterCommand("editor", function(pid)
   if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may shape the land."); return end
@@ -1243,14 +1352,7 @@ local function web_event(pid, name, data)
   elseif name == "menu.close" then
     close_frame(pid, "menu")
   elseif name == "menu.run" then
-    local cmd = tostring(data.cmd or "")
-    close_frame(pid, "menu")
-    local base = cmd:match("^(%S+)")
-    if base == "/me" then open_me(pid)
-    elseif base == "/hall" then if playerHouse[pid] then open_hall(pid) end
-    elseif base == "/admin" then if isAdmin(pid) then open_admin(pid) end
-    elseif base == "/menu" or base == "/help" then open_menu(pid)
-    else SendClientMessage(pid, COLOR_SERVER, "type it in the chat: " .. cmd) end
+    menu_do(pid, tostring(data.action or data.cmd or ""))
   elseif name == "me.close" then
     close_frame(pid, "me")
   elseif name == "house.close" then
@@ -1305,6 +1407,72 @@ local function web_event(pid, name, data)
       SendClientMessageToAll(COLOR_YELLOW, fmt("The war between %s and %s is over.", hname, enemyName))
       open_hall(pid)
     end
+  elseif name == "auction.close" then
+    close_frame(pid, "auction")
+  elseif name == "auction.sell" then
+    local res = tostring(data.res or "")
+    local amount = math.max(1, math.floor(tonumber(data.amount) or 1))
+    local price = math.max(1, math.floor(tonumber(data.price) or 1))
+    local rdef = RES[res]
+    if not rdef then
+      SendClientMessage(pid, COLOR_RED, "no such resource.")
+    elseif TakePlayerItem(pid, "fw_" .. res, amount) then
+      local id = auction_next
+      auction_next = auction_next + 1
+      local seller = accounts[pid] and accounts[pid].name or GetPlayerName(pid):lower()
+      auction_lots[id] = { id = id, seller = seller, res = res, amount = amount, price = price }
+      if db then
+        db:Execute("INSERT INTO auction (id, seller, res, amount, price) VALUES (@i, @s, @r, @a, @p)",
+          { i = id, s = seller, r = res, a = amount, p = price }, function() end)
+      end
+      SendClientMessage(pid, COLOR_YELLOW, fmt("lot #%d: %d x %s for %d groschen.", id, amount, rdef.name[lang_of(pid)] or res, price))
+      open_auction(pid)
+    else
+      SendClientMessage(pid, COLOR_RED, "you don't hold that many.")
+      open_auction(pid)
+    end
+  elseif name == "auction.buy" then
+    local id = math.floor(tonumber(data.id) or 0)
+    local lot = auction_lots[id]
+    if not lot then
+      SendClientMessage(pid, COLOR_RED, "no such lot.")
+    elseif GetPlayerMoney(pid) < lot.price then
+      SendClientMessage(pid, COLOR_RED, "not enough groschen.")
+    else
+      GivePlayerMoney(pid, -lot.price)
+      save_money(pid)
+      GivePlayerItem(pid, "fw_" .. lot.res, lot.amount)
+      -- pay the seller if they are around, else their purse waits in the database
+      local spid = GetPlayerId(lot.seller)
+      if spid then
+        GivePlayerMoney(spid, lot.price)
+        save_money(spid)
+        notice(spid, fmt("your lot #%d sold for %d groschen.", id, lot.price))
+      elseif db then
+        db:Execute("UPDATE players SET money = money + @m WHERE name = @n", { m = lot.price, n = lot.seller }, function() end)
+      end
+      auction_lots[id] = nil
+      if db then db:Execute("DELETE FROM auction WHERE id = @i", { i = id }, function() end) end
+      SendClientMessage(pid, COLOR_YELLOW, fmt("lot #%d is yours.", id))
+      open_auction(pid)
+    end
+  elseif name == "auction.cancel" then
+    local id = math.floor(tonumber(data.id) or 0)
+    local lot = auction_lots[id]
+    local me = accounts[pid] and accounts[pid].name
+    if lot and (lot.seller == me or isAdmin(pid)) then
+      GivePlayerItem(pid, "fw_" .. lot.res, lot.amount)
+      auction_lots[id] = nil
+      if db then db:Execute("DELETE FROM auction WHERE id = @i", { i = id }, function() end) end
+      open_auction(pid)
+    end
+  elseif name == "build.close" then
+    close_frame(pid, "build")
+  elseif name == "build.place" then
+    build_place(pid, data.name)
+  elseif name == "build.cancel" then
+    build_cancel(pid)
+    open_build(pid)
   elseif name == "admin.close" then
     close_frame(pid, "admin")
   elseif isAdmin(pid) then
