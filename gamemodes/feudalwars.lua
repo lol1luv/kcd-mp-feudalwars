@@ -89,7 +89,7 @@ local JOBS = {
 }
 
 -- forward declarations (assigned further down; used by the node core above)
-local lang_of, arch_open, bp_load_all, close_frame, isAdmin
+local lang_of, arch_open, bp_load_all, close_frame, isAdmin, MENU_TEXT
 local db, fmt, earn, save_money, job_skill_of, job_skill_up
 
 -- ---------------------------------------------------------------- breakable objects
@@ -1178,7 +1178,7 @@ local function open_menu(pid)
 end
 
 -- menu card texts (titles + descriptions) per language
-local MENU_TEXT = {
+MENU_TEXT = {
   en = {
     me_t = "My character", me_d = "Purse, house and standing",
     work_t = "Work the veins", work_d = "Strike rocks, trunks and sheaves for ore, wood and grain",
