@@ -40,13 +40,13 @@ local ECONOMY = {
 -- Resources: the vein gives real items (weight + price from the base game item),
 -- with rare drops. Coal/iron are common, silver/gold are rare. Sell them at the auction.
 local RES = {
-  coal  = { base = "charcoal", name = { en = "Coal", ru = "Уголь" }, price = 4 },
-  iron  = { base = "iron", name = { en = "Iron ore", ru = "Железная руда" }, price = 8 },
-  silver = { base = "silver", name = { en = "Silver ore", ru = "Серебряная руда" }, price = 25 },
-  gold  = { base = "gold", name = { en = "Gold ore", ru = "Золотая руда" }, price = 60 },
-  stone = { base = "stone", name = { en = "Stone", ru = "Камень" }, price = 2 },
-  wood  = { base = "wood", name = { en = "Timber", ru = "Бревно" }, price = 3 },
-  grain = { base = "grain", name = { en = "Grain", ru = "Зерно" }, price = 2 },
+  coal  = { base = "charcoal", name = { en = "Coal", ru = "РЈРіРѕР»СЊ" }, price = 4 },
+  iron  = { base = "iron", name = { en = "Iron ore", ru = "Р–РµР»РµР·РЅР°СЏ СЂСѓРґР°" }, price = 8 },
+  silver = { base = "silver", name = { en = "Silver ore", ru = "РЎРµСЂРµР±СЂСЏРЅР°СЏ СЂСѓРґР°" }, price = 25 },
+  gold  = { base = "gold", name = { en = "Gold ore", ru = "Р—РѕР»РѕС‚Р°СЏ СЂСѓРґР°" }, price = 60 },
+  stone = { base = "stone", name = { en = "Stone", ru = "РљР°РјРµРЅСЊ" }, price = 2 },
+  wood  = { base = "wood", name = { en = "Timber", ru = "Р‘СЂРµРІРЅРѕ" }, price = 3 },
+  grain = { base = "grain", name = { en = "Grain", ru = "Р—РµСЂРЅРѕ" }, price = 2 },
 }
 
 local JOBS = {
@@ -89,7 +89,7 @@ local JOBS = {
 }
 
 -- forward declarations (assigned further down; used by the node core above)
-local lang_of, arch_open, bp_load_all, close_frame, isAdmin, MENU_TEXT, say, say_text
+local lang_of, arch_open, bp_load_all, close_frame, isAdmin, MENU_TEXT, say, say_text, npc_load_all, npc_open_admin
 local db, fmt, earn, save_money, job_skill_of, job_skill_up
 
 -- ---------------------------------------------------------------- breakable objects
@@ -183,7 +183,7 @@ local function node_break(n, pid)
     if rdef then
       GivePlayerItem(pid, "fw_" .. n.res, n.yield or 1)
       local rname = rdef.name[lang_of(pid)] or rdef.name.en
-      say(pid, fmt("%s рассыпается — +%d × %s в сумку.", n.label or "камень", n.yield or 1, rname),
+      say(pid, fmt("%s СЂР°СЃСЃС‹РїР°РµС‚СЃСЏ вЂ” +%d Г— %s РІ СЃСѓРјРєСѓ.", n.label or "РєР°РјРµРЅСЊ", n.yield or 1, rname),
         fmt("%s breaks apart - %d %s to your bag.", n.label or "the stone", n.yield or 1, rname), COLOR_YELLOW)
     end
     local def = JOBS[n.kind]
@@ -193,7 +193,7 @@ local function node_break(n, pid)
       local total = skill + 1
       if total >= 10 and total % 10 == 0 then
         local nl = job_skill_up(pid, def.skill)
-        say(pid, fmt("навык %s вырос до %d.", def.skill, nl), fmt("%s skill raised to %d.", def.skill, nl), COLOR_YELLOW)
+        say(pid, fmt("РЅР°РІС‹Рє %s РІС‹СЂРѕСЃ РґРѕ %d.", def.skill, nl), fmt("%s skill raised to %d.", def.skill, nl), COLOR_YELLOW)
       else
         job_skill_up(pid, def.skill)
       end
@@ -382,7 +382,7 @@ end
 local function job_work_start(pid, kind, site_id)
   local site = (site_id and job_sites[site_id]) or job_find_near(pid, kind)
   if not site then
-    say(pid, "здесь нет работы — иди к отмеченному месту (/goto).", "no work site here - walk to a marked site (/goto).", COLOR_RED)
+    say(pid, "Р·РґРµСЃСЊ РЅРµС‚ СЂР°Р±РѕС‚С‹ вЂ” РёРґРё Рє РѕС‚РјРµС‡РµРЅРЅРѕРјСѓ РјРµСЃС‚Сѓ (/goto).", "no work site here - walk to a marked site (/goto).", COLOR_RED)
     return
   end
   local def = JOBS[site.kind]
@@ -395,29 +395,29 @@ local function job_work_start(pid, kind, site_id)
   end
   local skill = job_skill_of(pid, def.skill)
   local names = {
-    mine = { ru = "камней", en = "rocks" },
-    forest = { ru = "стволов", en = "trunks" },
-    farm = { ru = "снопов", en = "sheaves" },
+    mine = { ru = "РєР°РјРЅРµР№", en = "rocks" },
+    forest = { ru = "СЃС‚РІРѕР»РѕРІ", en = "trunks" },
+    farm = { ru = "СЃРЅРѕРїРѕРІ", en = "sheaves" },
   }
   local tools = {
-    mine = { ru = "кирку, молот или лопату", en = "a pickaxe, hammer or shovel" },
-    forest = { ru = "топор лесоруба", en = "a woodcutter's axe" },
-    farm = { ru = "лопату, мотыгу или серп", en = "a shovel, hoe or sickle" },
+    mine = { ru = "РєРёСЂРєСѓ, РјРѕР»РѕС‚ РёР»Рё Р»РѕРїР°С‚Сѓ", en = "a pickaxe, hammer or shovel" },
+    forest = { ru = "С‚РѕРїРѕСЂ Р»РµСЃРѕСЂСѓР±Р°", en = "a woodcutter's axe" },
+    farm = { ru = "Р»РѕРїР°С‚Сѓ, РјРѕС‚С‹РіСѓ РёР»Рё СЃРµСЂРї", en = "a shovel, hoe or sickle" },
   }
   local skills = {
-    mine = { ru = "горное дело", en = "mining" },
-    forest = { ru = "лесорубка", en = "woodcutting" },
-    farm = { ru = "земледелие", en = "farming" },
+    mine = { ru = "РіРѕСЂРЅРѕРµ РґРµР»Рѕ", en = "mining" },
+    forest = { ru = "Р»РµСЃРѕСЂСѓР±РєР°", en = "woodcutting" },
+    farm = { ru = "Р·РµРјР»РµРґРµР»РёРµ", en = "farming" },
   }
-  local tt = tools[site.kind] or { ru = "инструмент", en = "a tool" }
-  local nn = names[site.kind] or { ru = "ресурсов", en = "nodes" }
-  local ss = skills[site.kind] or { ru = "навык", en = "skill" }
+  local tt = tools[site.kind] or { ru = "РёРЅСЃС‚СЂСѓРјРµРЅС‚", en = "a tool" }
+  local nn = names[site.kind] or { ru = "СЂРµСЃСѓСЂСЃРѕРІ", en = "nodes" }
+  local ss = skills[site.kind] or { ru = "РЅР°РІС‹Рє", en = "skill" }
   if standing == 0 then
-    say(pid, fmt("%s истощено — %s вырастут снова со временем.", site.label or def.label, nn.ru),
+    say(pid, fmt("%s РёСЃС‚РѕС‰РµРЅРѕ вЂ” %s РІС‹СЂР°СЃС‚СѓС‚ СЃРЅРѕРІР° СЃРѕ РІСЂРµРјРµРЅРµРј.", site.label or def.label, nn.ru),
       fmt("%s is worked out - the %s grow back with time.", site.label or def.label, nn.en), COLOR_RED)
     return
   end
-  say(pid, fmt("%s: %d %s. Держи в руках %s и бей их. Твой навык (%s): %d.",
+  say(pid, fmt("%s: %d %s. Р”РµСЂР¶Рё РІ СЂСѓРєР°С… %s Рё Р±РµР№ РёС…. РўРІРѕР№ РЅР°РІС‹Рє (%s): %d.",
     site.label or def.label, standing, nn.ru, tt.ru, ss.ru, skill),
     fmt("%s: %d %s here. Hold %s and strike them. Your %s: %d.",
       site.label or def.label, standing, nn.en, tt.en, ss.en, skill), COLOR_YELLOW)
@@ -435,8 +435,8 @@ local function job_on_hit(pid, hit)
   local tool_ok = true
   if def and def.tools then tool_ok = job_has_tool(pid, def) end
   if not tool_ok then
-    local tr = { mine = "кирку, молот или лопату", forest = "топор лесоруба", farm = "лопату, мотыгу или серп" }
-    say(pid, fmt("нужно взять в руки %s.", tr[n.kind] or "инструмент"),
+    local tr = { mine = "РєРёСЂРєСѓ, РјРѕР»РѕС‚ РёР»Рё Р»РѕРїР°С‚Сѓ", forest = "С‚РѕРїРѕСЂ Р»РµСЃРѕСЂСѓР±Р°", farm = "Р»РѕРїР°С‚Сѓ, РјРѕС‚С‹РіСѓ РёР»Рё СЃРµСЂРї" }
+    say(pid, fmt("РЅСѓР¶РЅРѕ РІР·СЏС‚СЊ РІ СЂСѓРєРё %s.", tr[n.kind] or "РёРЅСЃС‚СЂСѓРјРµРЅС‚"),
       fmt("you need %s in your hands.", def.tool_names), COLOR_RED)
     return
   end
@@ -444,7 +444,7 @@ local function job_on_hit(pid, hit)
   pcall(PlaySound, (def and def.hit_sound) or "special_blacksmith_hammer_anvil", hit.x, hit.y, hit.z, 2)
   node_damage(n, pid, 1)
   if n.hp > 0 then
-    say(pid, fmt("треск... (%d/%d)", n.hp_max - n.hp, n.hp_max), fmt("crack... (%d/%d)", n.hp_max - n.hp, n.hp_max), COLOR_SERVER)
+    say(pid, fmt("С‚СЂРµСЃРє... (%d/%d)", n.hp_max - n.hp, n.hp_max), fmt("crack... (%d/%d)", n.hp_max - n.hp, n.hp_max), COLOR_SERVER)
   end
 end
 
@@ -477,8 +477,8 @@ local function job_status(pid)
       end
       local skill = job_skill_of(pid, def.skill)
       lines[#lines + 1] = say_text(pid,
-        fmt("%s — %d м, %d жил, навык %s %d", site.label or def.label, math.floor(dist), standing,
-          ({ mine = "горное дело", forest = "лесорубка", farm = "земледелие" })[site.kind] or def.skill, skill),
+        fmt("%s вЂ” %d Рј, %d Р¶РёР», РЅР°РІС‹Рє %s %d", site.label or def.label, math.floor(dist), standing,
+          ({ mine = "РіРѕСЂРЅРѕРµ РґРµР»Рѕ", forest = "Р»РµСЃРѕСЂСѓР±РєР°", farm = "Р·РµРјР»РµРґРµР»РёРµ" })[site.kind] or def.skill, skill),
         fmt("%s - %d m, %d node(s), %s %d", site.label or def.label, math.floor(dist), standing, def.skill, skill))
     end
   end
@@ -744,6 +744,7 @@ function OnGameModeInit()
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_skills (player VARCHAR(32), skill VARCHAR(16), level INT NOT NULL DEFAULT 0, PRIMARY KEY (player, skill))")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_nodes (id VARCHAR(64) PRIMARY KEY, kind VARCHAR(24) NOT NULL DEFAULT 'node', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, hp INT NOT NULL DEFAULT 4, hp_max INT NOT NULL DEFAULT 4, res VARCHAR(16) NOT NULL DEFAULT 'stone', respawn_at BIGINT NOT NULL DEFAULT 0, mapid INT NOT NULL DEFAULT 0, mesh VARCHAR(255), label VARCHAR(64), is_map TINYINT NOT NULL DEFAULT 0)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_blueprints (name VARCHAR(48) PRIMARY KEY, parts MEDIUMTEXT, cost INT NOT NULL DEFAULT 0, author VARCHAR(32))")
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_npcs (id INT PRIMARY KEY, role VARCHAR(16) NOT NULL DEFAULT 'civilian', name VARCHAR(64) NOT NULL DEFAULT '', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, yaw DOUBLE NOT NULL DEFAULT 0, prompt VARCHAR(64) NOT NULL DEFAULT '', data MEDIUMTEXT)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS auction (id INT AUTO_INCREMENT PRIMARY KEY, seller VARCHAR(32), res VARCHAR(16), amount INT NOT NULL DEFAULT 1, price INT NOT NULL DEFAULT 1)")
     local arows = db:QuerySync("SELECT id, seller, res, amount, price FROM auction")
     if arows then
@@ -874,6 +875,7 @@ function OnGameModeInit()
 
   -- the architect: an NPC by the spawn whose use key opens the blueprint workshop
   bp_load_all()
+  npc_load_all()
   local architect = CreateActor(nil, sx + 4.0, sy + 3.0, sz, 0, "Master Builder Havel", nil, "none", nil)
   if architect then
     SetActorPrompt(architect, "Plan a structure")
@@ -1214,13 +1216,13 @@ end
 local STR = {
   en = {
     menu_title = "Feudal Wars",
-    menu_keys = "E — ask about work · F2 — this menu · Esc — close",
+    menu_keys = "E вЂ” ask about work В· F2 вЂ” this menu В· Esc вЂ” close",
     lang_saved = "Language: English.",
   },
   ru = {
-    menu_title = "Феодальные войны",
-    menu_keys = "E — спросить о работе · F2 — это меню · Esc — закрыть",
-    lang_saved = "Язык: русский.",
+    menu_title = "Р¤РµРѕРґР°Р»СЊРЅС‹Рµ РІРѕР№РЅС‹",
+    menu_keys = "E вЂ” СЃРїСЂРѕСЃРёС‚СЊ Рѕ СЂР°Р±РѕС‚Рµ В· F2 вЂ” СЌС‚Рѕ РјРµРЅСЋ В· Esc вЂ” Р·Р°РєСЂС‹С‚СЊ",
+    lang_saved = "РЇР·С‹Рє: СЂСѓСЃСЃРєРёР№.",
   },
 }
 
@@ -1273,19 +1275,19 @@ MENU_TEXT = {
     editor_t = "Map editor", editor_d = "The game's own editor: fly, place meshes",
   },
   ru = {
-    me_t = "Мой персонаж", me_d = "Кошелёк, дом и положение",
-    work_t = "Работать на жилах", work_d = "Бей камни, стволы и снопы — руда, дерево, зерно",
-    auction_t = "Торг", auction_d = "Продай товар, купи у других игроков",
-    goto_mine_t = "К каменоломням", goto_mine_d = "Куттенбергская каменоломня и горный штрек",
-    goto_farm_t = "К полям", goto_farm_d = "Низинные и мельничные поля",
-    goto_forest_t = "К лесам", goto_forest_d = "Северный лес и старая роща",
-    goto_spawn_t = "На площадь", goto_spawn_d = "Обратно к точке появления",
-    skills_t = "Мои навыки", skills_d = "Горное дело, земледелие, лесорубка",
-    kit_t = "Одолжить инструмент", kit_d = "Бригадир выдаст нужный инструмент у ближней точки",
-    hall_t = "Зал дома", hall_d = "Люди, казна и войны",
-    trade_t = "Торг", trade_d = "Открыть торговый дом",
-    build_t = "Зодчий", build_d = "Разложи, сохрани и ставь чертежи (админы)",
-    editor_t = "Редактор карты", editor_d = "Встроенный редактор: полёт, объекты",
+    me_t = "РњРѕР№ РїРµСЂСЃРѕРЅР°Р¶", me_d = "РљРѕС€РµР»С‘Рє, РґРѕРј Рё РїРѕР»РѕР¶РµРЅРёРµ",
+    work_t = "Р Р°Р±РѕС‚Р°С‚СЊ РЅР° Р¶РёР»Р°С…", work_d = "Р‘РµР№ РєР°РјРЅРё, СЃС‚РІРѕР»С‹ Рё СЃРЅРѕРїС‹ вЂ” СЂСѓРґР°, РґРµСЂРµРІРѕ, Р·РµСЂРЅРѕ",
+    auction_t = "РўРѕСЂРі", auction_d = "РџСЂРѕРґР°Р№ С‚РѕРІР°СЂ, РєСѓРїРё Сѓ РґСЂСѓРіРёС… РёРіСЂРѕРєРѕРІ",
+    goto_mine_t = "Рљ РєР°РјРµРЅРѕР»РѕРјРЅСЏРј", goto_mine_d = "РљСѓС‚С‚РµРЅР±РµСЂРіСЃРєР°СЏ РєР°РјРµРЅРѕР»РѕРјРЅСЏ Рё РіРѕСЂРЅС‹Р№ С€С‚СЂРµРє",
+    goto_farm_t = "Рљ РїРѕР»СЏРј", goto_farm_d = "РќРёР·РёРЅРЅС‹Рµ Рё РјРµР»СЊРЅРёС‡РЅС‹Рµ РїРѕР»СЏ",
+    goto_forest_t = "Рљ Р»РµСЃР°Рј", goto_forest_d = "РЎРµРІРµСЂРЅС‹Р№ Р»РµСЃ Рё СЃС‚Р°СЂР°СЏ СЂРѕС‰Р°",
+    goto_spawn_t = "РќР° РїР»РѕС‰Р°РґСЊ", goto_spawn_d = "РћР±СЂР°С‚РЅРѕ Рє С‚РѕС‡РєРµ РїРѕСЏРІР»РµРЅРёСЏ",
+    skills_t = "РњРѕРё РЅР°РІС‹РєРё", skills_d = "Р“РѕСЂРЅРѕРµ РґРµР»Рѕ, Р·РµРјР»РµРґРµР»РёРµ, Р»РµСЃРѕСЂСѓР±РєР°",
+    kit_t = "РћРґРѕР»Р¶РёС‚СЊ РёРЅСЃС‚СЂСѓРјРµРЅС‚", kit_d = "Р‘СЂРёРіР°РґРёСЂ РІС‹РґР°СЃС‚ РЅСѓР¶РЅС‹Р№ РёРЅСЃС‚СЂСѓРјРµРЅС‚ Сѓ Р±Р»РёР¶РЅРµР№ С‚РѕС‡РєРё",
+    hall_t = "Р—Р°Р» РґРѕРјР°", hall_d = "Р›СЋРґРё, РєР°Р·РЅР° Рё РІРѕР№РЅС‹",
+    trade_t = "РўРѕСЂРі", trade_d = "РћС‚РєСЂС‹С‚СЊ С‚РѕСЂРіРѕРІС‹Р№ РґРѕРј",
+    build_t = "Р—РѕРґС‡РёР№", build_d = "Р Р°Р·Р»РѕР¶Рё, СЃРѕС…СЂР°РЅРё Рё СЃС‚Р°РІСЊ С‡РµСЂС‚РµР¶Рё (Р°РґРјРёРЅС‹)",
+    editor_t = "Р РµРґР°РєС‚РѕСЂ РєР°СЂС‚С‹", editor_d = "Р’СЃС‚СЂРѕРµРЅРЅС‹Р№ СЂРµРґР°РєС‚РѕСЂ: РїРѕР»С‘С‚, РѕР±СЉРµРєС‚С‹",
   },
 }
 
@@ -1467,7 +1469,132 @@ RegisterCommand("tp", function(pid, args)
   SetPlayerPos(pid, x + 1, y, z, yaw)
 end, { help = "travel to a player", params = "<player>", admin = true, secret = true })
 
--- ---------------------------------------------------------------- builder: ready structures + preview
+-- ---------------------------------------------------------------- NPC constructor
+-- Admins place and configure the world's people: vendors with stock and prices,
+-- trainers, guards, quest givers. Each NPC is a row in fw_npcs and is rebuilt on
+-- every boot, so the world's cast survives a restart.
+
+local npcs = {}          -- id -> { id, role, name, x, y, z, yaw, actor, shop, prompt, data }
+local npc_next = 1
+local NPC_ROLES = { vendor = true, trainer = true, guard = true, quest = true, civilian = true }
+
+local function npc_role_label(role, lang)
+  local L = {
+    vendor = { en = "Vendor", ru = "РўРѕСЂРіРѕРІРµС†" },
+    trainer = { en = "Trainer", ru = "РЈС‡РёС‚РµР»СЊ" },
+    guard = { en = "Guard", ru = "РЎС‚СЂР°Р¶РЅРёРє" },
+    quest = { en = "Quest giver", ru = "Р”Р°С‘С‚ РїРѕСЂСѓС‡РµРЅРёСЏ" },
+    civilian = { en = "Citizen", ru = "Р“РѕСЂРѕР¶Р°РЅРёРЅ" },
+  }
+  local r = L[role] or L.civilian
+  return r[lang] or r.en
+end
+
+local function npc_persist(n)
+  if not db then return end
+  db:Execute("INSERT INTO fw_npcs (id, role, name, x, y, z, yaw, prompt, data) VALUES (@i, @r, @n, @x, @y, @z, @yw, @p, @d) " ..
+    "ON DUPLICATE KEY UPDATE role=@r2, name=@n2, x=@x2, y=@y2, z=@z2, yaw=@yw2, prompt=@p2, data=@d2",
+    { i = n.id, r = n.role, n = n.name, x = n.x, y = n.y, z = n.z, yw = n.yaw or 0, p = n.prompt or "", d = JsonEncode(n.data or {}),
+      r2 = n.role, n2 = n.name, x2 = n.x, y2 = n.y, z2 = n.z, yw2 = n.yaw or 0, p2 = n.prompt or "", d2 = JsonEncode(n.data or {}) },
+    function() end)
+end
+
+local function npc_spawn(n)
+  if n.actor then pcall(DestroyEntity, n.actor) n.actor = nil end
+  if n.shop then pcall(DestroyShop, n.shop) n.shop = nil end
+  local z = ground_z(n.x, n.y, n.z)
+  n.z = z
+  local actor = CreateActor(nil, n.x, n.y, z, n.yaw or 0, n.name, nil, "none", nil)
+  if not actor then
+    Log(fmt("feudalwars: npc %s (%s) refused by the world", n.id, n.name))
+    return
+  end
+  n.actor = actor
+  local prompt = n.prompt
+  if (not prompt or prompt == "") and n.role == "vendor" then prompt = "Trade" end
+  if (not prompt or prompt == "") and n.role == "trainer" then prompt = "Train" end
+  if (not prompt or prompt == "") and n.role == "guard" then prompt = "Hail the guard" end
+  if (not prompt or prompt == "") and n.role == "quest" then prompt = "Take a task" end
+  if prompt and prompt ~= "" then pcall(SetActorPrompt, actor, prompt) end
+  if n.role == "vendor" then
+    local stock = n.data and n.data.stock or {}
+    local shop = CreateShop(n.name or "Merchant", 0.5, -1)
+    if shop then
+      n.shop = shop
+      for _, row in ipairs(stock) do
+        pcall(SetShopItem, shop, row.item, row.price or 10, row.amount or -1)
+      end
+      pcall(SetActorShop, actor, shop)
+    end
+  end
+  if n.role == "trainer" and n.data and n.data.skill then
+    pcall(SetActorNameplateTitle, actor, npc_role_label("trainer", "en") .. ": " .. tostring(n.data.skill), 1.0, "0xE8C84AFF", "top")
+  end
+end
+
+npc_load_all = function()
+  if not db then return end
+  local rows = db:QuerySync("SELECT id, role, name, x, y, z, yaw, prompt, data FROM fw_npcs")
+  if not rows then return end
+  for _, r in ipairs(rows) do
+    local ok, data = pcall(JsonDecode, r.data or "{}")
+    local n = {
+      id = r.id, role = r.role, name = r.name, x = r.x, y = r.y, z = r.z,
+      yaw = r.yaw or 0, prompt = r.prompt, data = ok and data or {},
+    }
+    npcs[r.id] = n
+    if r.id >= npc_next then npc_next = r.id + 1 end
+    npc_spawn(n)
+  end
+  Log("feudalwars: loaded " .. #rows .. " npc(s)")
+end
+
+local function npc_create(pid, role, name)
+  if not isAdmin(pid) then
+    say(pid, "С‚РѕР»СЊРєРѕ СЃР»СѓРіРё РєРѕСЂРѕРЅС‹ СЃС‚Р°РІСЏС‚ Р»СЋРґРµР№.", "only the crown's servants place people.", COLOR_RED)
+    return
+  end
+  role = (role or ""):lower()
+  if not NPC_ROLES[role] then
+    say(pid, "СЂРѕР»Рё: vendor, trainer, guard, quest, civilian.", "roles: vendor, trainer, guard, quest, civilian.", COLOR_RED)
+    return
+  end
+  name = tostring(name or "")
+  if #name < 2 then
+    say(pid, "РґР°Р№ РёРјСЏ: /npc add <СЂРѕР»СЊ> <РёРјСЏ>.", "give a name: /npc add <role> <name>.", COLOR_RED)
+    return
+  end
+  local px, py, pz = GetPlayerPos(pid)
+  local id = npc_next
+  npc_next = npc_next + 1
+  local n = { id = id, role = role, name = name, x = px, y = py, z = ground_z(px, py, pz), yaw = GetPlayerYaw(pid) + 180.0, data = { stock = {} } }
+  npcs[id] = n
+  npc_persist(n)
+  npc_spawn(n)
+  say(pid, fmt("РїРѕСЃС‚Р°РІР»РµРЅ %s В«%sВ» (#%d).", npc_role_label(role, "ru"), name, id),
+    fmt("placed %s '%s' (#%d).", npc_role_label(role, "en"), name, id), COLOR_YELLOW)
+end
+
+npc_open_admin = function(pid)
+  if not isAdmin(pid) then return end
+  open_frame(pid, "npc")
+  local lang = lang_of(pid)
+  local list = {}
+  for id, n in pairs(npcs) do
+    list[#list + 1] = {
+      id = id, name = n.name, role = n.role, role_label = npc_role_label(n.role, lang),
+      x = math.floor(n.x), y = math.floor(n.y),
+      stock = n.data and n.data.stock and #n.data.stock or 0,
+    }
+  end
+  table.sort(list, function(a, b) return a.id < b.id end)
+  local items = {}
+  for res, rdef in pairs(RES) do
+    items[#items + 1] = { item = "fw_" .. res, label = rdef.name[lang] or rdef.name.en, price = rdef.price }
+  end
+  table.sort(items, function(a, b) return a.price < b.price end)
+  SendPlayerWebMessage(pid, "npc", { lang = lang, npcs = list, items = items })
+end
 
 -- ---------------------------------------------------------------- blueprints (the architect)
 -- A blueprint is a set of parts saved from the world: the architect lays out
@@ -1478,40 +1605,40 @@ end, { help = "travel to a player", params = "<player>", admin = true, secret = 
 
 local BUILD_CATALOG = {
   tent = {
-    label = { en = "Campaign tent", ru = "Походная палатка" },
+    label = { en = "Campaign tent", ru = "РџРѕС…РѕРґРЅР°СЏ РїР°Р»Р°С‚РєР°" },
     parts = { "objects/manmade/structures/living/tents/tent_big_fancy_a.cgf" },
   },
   stall = {
-    label = { en = "Market stall", ru = "Торговая лавка" },
+    label = { en = "Market stall", ru = "РўРѕСЂРіРѕРІР°СЏ Р»Р°РІРєР°" },
     parts = {
       "objects/manmade/task_specific_props/trade/merge_market_bread_stand.cgf",
       "objects/manmade/common_furniture/barrels/barrel_a.cgf",
     },
   },
   camp = {
-    label = { en = "Campfire", ru = "Костёр" },
+    label = { en = "Campfire", ru = "РљРѕСЃС‚С‘СЂ" },
     parts = {
       "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
       "objects/manmade/common_furniture/crates/crate_low_a.cgf",
     },
   },
   palisade = {
-    label = { en = "Palisade wall", ru = "Частокол" },
+    label = { en = "Palisade wall", ru = "Р§Р°СЃС‚РѕРєРѕР»" },
     parts = { "objects/manmade/structures/defensive/walls/palisade/palisade_wall_a_v1.cgf" },
   },
   tower = {
-    label = { en = "Watch tower", ru = "Сторожевая башня" },
+    label = { en = "Watch tower", ru = "РЎС‚РѕСЂРѕР¶РµРІР°СЏ Р±Р°С€РЅСЏ" },
     parts = { "objects/manmade/structures/defensive/castles/unique/trosky/panna_wooden_tower.cgf" },
   },
   forge = {
-    label = { en = "Field forge", ru = "Полевая кузня" },
+    label = { en = "Field forge", ru = "РџРѕР»РµРІР°СЏ РєСѓР·РЅСЏ" },
     parts = {
       "objects/manmade/task_specific_props/metal_industry/smithing/anvil.cgf",
       "objects/manmade/task_specific_props/metal_industry/smithing/forge_small_a.cgf",
     },
   },
   rock_pile = {
-    label = { en = "Rock pile (mineable)", ru = "Нагромождение камней (добыча)" },
+    label = { en = "Rock pile (mineable)", ru = "РќР°РіСЂРѕРјРѕР¶РґРµРЅРёРµ РєР°РјРЅРµР№ (РґРѕР±С‹С‡Р°)" },
     parts = { "objects/natural/rocks/boulder_granite_a.cgf", "objects/natural/rocks/boulder_granite_a.cgf" },
     nodes = true,   -- its rocks are breakable on every copy
   },
@@ -1703,6 +1830,34 @@ RegisterCommand("build", function(pid)
   arch_open(pid)
 end, { help = "the architect: lay out, save and stamp blueprints (admins)" })
 
+RegisterCommand("npc", function(pid, args)
+  if not isAdmin(pid) then
+    say(pid, "С‚РѕР»СЊРєРѕ СЃР»СѓРіРё РєРѕСЂРѕРЅС‹ СЃС‚Р°РІСЏС‚ Р»СЋРґРµР№.", "only the crown's servants place people.", COLOR_RED)
+    return
+  end
+  local verb, rest = args:match("^(%S*)%s*(.-)$")
+  verb = (verb or ""):lower()
+  if verb == "add" then
+    local role, name = rest:match("^(%S*)%s*(.-)$")
+    npc_create(pid, role, name)
+  elseif verb == "list" or verb == "" then
+    npc_open_admin(pid)
+  elseif verb == "remove" or verb == "del" then
+    local id = math.floor(tonumber(rest) or 0)
+    local n = npcs[id]
+    if n then
+      if n.actor then pcall(DestroyEntity, n.actor) end
+      if n.shop then pcall(DestroyShop, n.shop) end
+      npcs[id] = nil
+      if db then db:Execute("DELETE FROM fw_npcs WHERE id = @i", { i = id }, function() end) end
+      say(pid, fmt("NPC #%d СѓР±СЂР°РЅ.", id), fmt("NPC #%d removed.", id), COLOR_SERVER)
+    end
+  else
+    say(pid, "usage: /npc add <role> <name> | list | remove <id>",
+      "usage: /npc add <role> <name> | list | remove <id>", COLOR_SERVER)
+  end
+end, { help = "place and configure NPCs (admins)", params = "add|list|remove", admin = true })
+
 RegisterCommand("arch", function(pid, args)
   if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may build."); return end
   local verb, rest = args:match("^(%S*)%s*(.-)$")
@@ -1779,7 +1934,7 @@ function OnPlayerInteract(pid, id)
   if nkey then
     local n = nodes[nkey]
     if n and n.hp > 0 then
-      say(pid, fmt("%s — %d/%d. Бей нужным инструментом.", n.label or "камень", n.hp, n.hp_max),
+      say(pid, fmt("%s вЂ” %d/%d. Р‘РµР№ РЅСѓР¶РЅС‹Рј РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРј.", n.label or "РєР°РјРµРЅСЊ", n.hp, n.hp_max),
         fmt("%s - %d/%d. Strike it with the right tool.", n.label or "the stone", n.hp, n.hp_max), COLOR_SERVER)
     end
     return
@@ -1950,6 +2105,36 @@ local function web_event(pid, name, data)
   elseif name == "build.cancel" then
     arch_draft_clear(pid)
     arch_open(pid)
+  elseif name == "npc.close" then
+    close_frame(pid, "npc")
+  elseif name == "npc.remove" then
+    local id = math.floor(tonumber(data.id) or 0)
+    local n = npcs[id]
+    if n and isAdmin(pid) then
+      if n.actor then pcall(DestroyEntity, n.actor) end
+      if n.shop then pcall(DestroyShop, n.shop) end
+      npcs[id] = nil
+      if db then db:Execute("DELETE FROM fw_npcs WHERE id = @i", { i = id }, function() end) end
+      npc_open_admin(pid)
+    end
+  elseif name == "npc.stock" then
+    local id = math.floor(tonumber(data.id) or 0)
+    local n = npcs[id]
+    if n and isAdmin(pid) and n.role == "vendor" then
+      n.data = n.data or {}
+      n.data.stock = n.data.stock or {}
+      local item = tostring(data.item or "")
+      local price = math.max(1, math.floor(tonumber(data.price) or 10))
+      local found = false
+      for _, row in ipairs(n.data.stock) do
+        if row.item == item then row.price = price found = true end
+      end
+      if not found then n.data.stock[#n.data.stock + 1] = { item = item, price = price, amount = -1 } end
+      npc_persist(n)
+      if n.shop then pcall(SetShopItem, n.shop, item, price, -1) end
+      say(pid, "С‚РѕРІР°СЂ РЅР° РїСЂРёР»Р°РІРєРµ.", "the good is on the counter.", COLOR_YELLOW)
+      npc_open_admin(pid)
+    end
   elseif name == "admin.close" then
     close_frame(pid, "admin")
   elseif isAdmin(pid) then

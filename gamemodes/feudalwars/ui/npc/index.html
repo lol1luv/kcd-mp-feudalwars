@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feudal Wars</title>
+<link rel="stylesheet" href="../feudalwars.css">
+</head>
+<body>
+<section class="window wide" aria-label="NPC constructor">
+  <header>
+    <div class="crest">👤</div>
+    <h1 id="title">People of the realm</h1>
+    <button class="close" id="close" type="button" aria-label="Close">&times;</button>
+  </header>
+  <div id="body">
+    <p class="lead" id="lead"></p>
+
+    <table id="npcs"><thead><tr><th>#</th><th id="th-name"></th><th id="th-role"></th><th id="th-place"></th><th id="th-stock"></th><th></th></tr></thead><tbody></tbody></table>
+
+    <h2 id="stock-h" hidden></h2>
+    <div id="stock-box" hidden>
+      <p class="lead" id="stock-lead"></p>
+      <div class="hero-buttons" id="item-buttons"></div>
+    </div>
+  </div>
+  <footer id="foot"></footer>
+</section>
+<script src="npc.js"></script>
+</body>
+</html>

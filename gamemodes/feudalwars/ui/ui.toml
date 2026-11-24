@@ -62,3 +62,11 @@ preload = true
 z = 315
 focus = "open"
 events_out = ["build.*"]
+
+# The NPC constructor (admins): people of the realm, their roles and stock.
+[frames.npc]
+page = "npc/index.html"
+preload = true
+z = 318
+focus = "open"
+events_out = ["npc.*"]
