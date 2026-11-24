@@ -28,6 +28,149 @@ local ECONOMY = {
   prestige_cost = 10000,
 }
 
+-- ---------------------------------------------------------------- jobs (module 1: gathering)
+-- Three work sites near the spawn: a mine, a farm field, a logging camp.
+-- Each site has veins/nodes with stock that depletes and regrows; working a
+-- node pays per unit and raises the matching skill, which speeds up the work
+-- and raises the pay. Sites persist in the database (table jobs).
+
+local JOBS = {
+  mine = {
+    label = "the mine", skill = "mining", unit = "ore",
+    stock_max = 50, regrow_ms = 600000, work_ms = 8000,
+    pay = 6, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+  },
+  farm = {
+    label = "the field", skill = "farming", unit = "sheaf",
+    stock_max = 60, regrow_ms = 300000, work_ms = 6000,
+    pay = 5, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+  },
+  forest = {
+    label = "the logging camp", skill = "woodcutting", unit = "log",
+    stock_max = 40, regrow_ms = 450000, work_ms = 7000,
+    pay = 5, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+  },
+}
+
+local job_sites = {}    -- id -> { id, kind, x, y, z, stock }
+local job_work = {}     -- pid -> { site_id, ready_at }
+local job_skills = {}   -- pid -> { mining = n, farming = n, woodcutting = n }
+
+local function job_skill_of(pid, skill)
+  local s = job_skills[pid]
+  return (s and s[skill]) or 0
+end
+
+local function job_skill_up(pid, skill)
+  job_skills[pid] = job_skills[pid] or {}
+  local s = job_skills[pid]
+  s[skill] = (s[skill] or 0) + 1
+  if db then
+    db:Execute("INSERT INTO job_skills (player, skill, level) VALUES (@p, @s, @l) " ..
+      "ON DUPLICATE KEY UPDATE level = @l2",
+      { p = accounts[pid] and accounts[pid].name or ("pid" .. pid), s = skill, l = s[skill], l2 = s[skill] }, function() end)
+  end
+  return s[skill]
+end
+
+local function job_find_near(pid, kind)
+  local px, py, pz = GetPlayerPos(pid)
+  local best, bestd = nil, 6.0
+  for _, site in pairs(job_sites) do
+    if site.kind == kind then
+      local dx, dy, dz = site.x - px, site.y - py, site.z - pz
+      local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+      if d < bestd then best, bestd = site, d end
+    end
+  end
+  return best
+end
+
+local function job_work_start(pid, kind)
+  if job_work[pid] then
+    SendClientMessage(pid, COLOR_RED, "you are already working - wait for the shift to end.")
+    return
+  end
+  local site = job_find_near(pid, kind)
+  if not site then
+    SendClientMessage(pid, COLOR_RED, fmt("no %s nearby - walk to %s.", JOBS[kind].label, JOBS[kind].label))
+    return
+  end
+  if site.stock <= 0 then
+    SendClientMessage(pid, COLOR_RED, fmt("%s is exhausted - it regrows with time.", JOBS[kind].label))
+    return
+  end
+  local def = JOBS[kind]
+  local skill = job_skill_of(pid, def.skill)
+  local work_ms = math.floor(def.work_ms * math.max(0.4, 1 - skill * def.skill_speed_bonus))
+  job_work[pid] = { site_id = site.id, ready_at = GetServerTime() + work_ms }
+  SendClientMessage(pid, COLOR_SERVER, fmt("you started a shift at %s (%d %s left). Back in %d seconds: /job done.",
+    def.label, site.stock, def.unit, math.floor(work_ms / 1000)))
+  SetTimer(function()
+    local w = job_work[pid]
+    if w and w.site_id == site.id then
+      SendClientMessage(pid, COLOR_YELLOW, fmt("your shift at %s is done: /job done to collect.", def.label))
+    end
+  end, work_ms, false)
+end
+
+local function job_work_collect(pid)
+  local w = job_work[pid]
+  if not w then
+    SendClientMessage(pid, COLOR_RED, "no shift in progress - /job <mine|farm|forest> to start.")
+    return
+  end
+  local site = job_sites[w.site_id]
+  if not site then job_work[pid] = nil return end
+  local def = JOBS[site.kind]
+  if GetServerTime() < w.ready_at then
+    local left = math.ceil((w.ready_at - GetServerTime()) / 1000)
+    SendClientMessage(pid, COLOR_RED, fmt("the shift is not done yet - %d seconds left.", left))
+    return
+  end
+  job_work[pid] = nil
+  if site.stock <= 0 then
+    SendClientMessage(pid, COLOR_RED, fmt("%s ran dry while you worked.", def.label))
+    return
+  end
+  site.stock = site.stock - 1
+  if db then
+    db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = site.stock, i = site.id }, function() end)
+  end
+  local skill = job_skill_of(pid, def.skill)
+  local pay = def.pay + skill * def.skill_pay_bonus
+  local total_units = skill + 1
+  if total_units >= 10 and total_units % 10 == 0 then
+    local nl = job_skill_up(pid, def.skill)
+    SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d: faster shifts, +%d per unit.", def.skill, nl, def.skill_pay_bonus))
+  else
+    job_skill_up(pid, def.skill)
+  end
+  earn(pid, pay)
+  save_money(pid)
+  SendClientMessage(pid, COLOR_SERVER, fmt("+1 %s, +%d groschen (%s %d left).", def.unit, pay, def.label, site.stock))
+end
+
+local function job_status(pid)
+  local lines = {}
+  for kind, def in pairs(JOBS) do
+    local site = job_find_near(pid, kind)
+    local skill = job_skill_of(pid, def.skill)
+    if site then
+      lines[#lines + 1] = fmt("%s: %d %s left, your %s %d", def.label, site.stock, def.unit, def.skill, skill)
+    else
+      lines[#lines + 1] = fmt("%s: walk closer to see the stock (your %s %d)", def.label, def.skill, skill)
+    end
+  end
+  if job_work[pid] then
+    local w = job_work[pid]
+    local site = job_sites[w.site_id]
+    local left = math.max(0, math.ceil((w.ready_at - GetServerTime()) / 1000))
+    lines[#lines + 1] = fmt("shift: %s, %d seconds left.", site and JOBS[site.kind].label or "?", left)
+  end
+  for _, l in ipairs(lines) do SendClientMessage(pid, COLOR_SERVER, l) end
+end
+
 local RANKS = { "lord", "steward", "retainer" }
 
 local ADMIN_NAMES = { "minsk" }   -- promoted on connect; extend or move into the database
@@ -218,10 +361,47 @@ function OnGameModeInit()
       end
       Log("feudalwars: loaded " .. #mrows .. " house member(s)")
     end
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_sites (id VARCHAR(32) PRIMARY KEY, kind VARCHAR(16) NOT NULL DEFAULT 'mine', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, stock INT NOT NULL DEFAULT 0)")
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_skills (player VARCHAR(32), skill VARCHAR(16), level INT NOT NULL DEFAULT 0, PRIMARY KEY (player, skill))")
+    local srows = db:QuerySync("SELECT id, kind, x, y, z, stock FROM job_sites")
+    if srows then
+      for _, r in ipairs(srows) do
+        job_sites[r.id] = { id = r.id, kind = r.kind, x = r.x, y = r.y, z = r.z, stock = r.stock or 0 }
+      end
+      Log("feudalwars: loaded " .. #srows .. " job site(s)")
+    end
   end
 
   local sx, sy, sz, syaw = GetDefaultSpawn()
   AddSpawnPoint(sx, sy, sz, syaw, "town")
+
+  -- default work sites near the spawn (kept in memory when there is no database)
+  local function job_ensure(id, kind, dx, dy)
+    if job_sites[id] then return end
+    local def = JOBS[kind]
+    job_sites[id] = { id = id, kind = kind, x = sx + dx, y = sy + dy, z = sz, stock = def.stock_max }
+    if db then
+      local s = job_sites[id]
+      db:Execute("INSERT INTO job_sites (id, kind, x, y, z, stock) VALUES (@i, @k, @x, @y, @z, @s)",
+        { i = id, k = kind, x = s.x, y = s.y, z = s.z, s = s.stock }, function() end)
+    end
+  end
+  job_ensure("mine1", "mine", -8.0, -4.0)
+  job_ensure("farm1", "farm", 8.0, -4.0)
+  job_ensure("forest1", "forest", 0.0, -10.0)
+
+  -- regrow job stocks on a timer
+  SetTimer(function()
+    for _, site in pairs(job_sites) do
+      local def = JOBS[site.kind]
+      if def and site.stock < def.stock_max then
+        site.stock = math.min(def.stock_max, site.stock + math.max(1, math.floor(def.stock_max / 10)))
+        if db then
+          db:Execute("UPDATE job_sites SET stock = @s WHERE id = @i", { s = site.stock, i = site.id }, function() end)
+        end
+      end
+    end
+  end, 60000, true)
 
   local shop = CreateShop("The King's Provisioner", 0.5, -1)
   SetShopItem(shop, "torch", 10, -1)
@@ -306,6 +486,12 @@ function OnPlayerConnect(pid)
       end
       restoreHouse()
     end)
+    db:Query("SELECT skill, level FROM job_skills WHERE player = @n", { n = lname }, function(rows)
+      if rows then
+        job_skills[pid] = job_skills[pid] or {}
+        for _, r in ipairs(rows) do job_skills[pid][r.skill] = r.level or 0 end
+      end
+    end)
   end
 end
 
@@ -330,6 +516,8 @@ end
 
 function OnPlayerDisconnect(pid, reason)
   save_money(pid)
+  job_work[pid] = nil
+  job_skills[pid] = nil
   local name = playerHouse[pid]
   if name and houses[name] then houses[name].members[GetPlayerName(pid):lower()] = nil end
   playerHouse[pid] = nil
@@ -487,6 +675,22 @@ end, { help = "pay another player", params = "<player> <amount>" })
 
 RegisterCommand("farm", function(pid) earn(pid, ECONOMY.farm_pay) end, { help = "work the field for groschen" })
 RegisterCommand("craft", function(pid) earn(pid, ECONOMY.craft_pay) end, { help = "work the forge for groschen" })
+
+RegisterCommand("job", function(pid, args)
+  local verb = (args:match("^(%S*)") or ""):lower()
+  if verb == "mine" or verb == "farm" or verb == "forest" then
+    job_work_start(pid, verb)
+  elseif verb == "done" then
+    job_work_collect(pid)
+  elseif verb == "skills" then
+    local s = job_skills[pid] or {}
+    SendClientMessage(pid, COLOR_SERVER, fmt("skills: mining %d, farming %d, woodcutting %d.",
+      s.mining or 0, s.farming or 0, s.woodcutting or 0))
+  else
+    job_status(pid)
+    SendClientMessage(pid, COLOR_SERVER, "usage: /job [mine|farm|forest|done|skills]")
+  end
+end, { help = "work sites: mine, farm, forest", params = "[mine|farm|forest|done|skills]" })
 
 RegisterCommand("prestige", function(pid, args)
   local verb = args:match("^(%S*)"):lower()
