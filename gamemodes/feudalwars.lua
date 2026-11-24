@@ -922,8 +922,9 @@ function OnGameModeInit()
   -- The plan's sites are authoritative: wipe any old row and old node for them,
   -- so a bad coordinate or a stale mesh from an earlier build never comes back.
   if db then
-    -- drop every work-kind site and node from earlier builds; the plan rebuilds them
-    db:ExecuteSync("DELETE FROM fw_nodes WHERE kind IN ('mine','farm','forest')")
+    -- drop old WORK nodes only (their keys start with the plan ids); blueprint
+    -- boulders (keys "stamp_"/"bp_") are left alone, the plan rebuilds work nodes
+    db:ExecuteSync("DELETE FROM fw_nodes WHERE id LIKE 'mine_%' OR id LIKE 'farm_%' OR id LIKE 'forest_%'")
     db:ExecuteSync("DELETE FROM job_sites WHERE kind IN ('mine','farm','forest')")
     job_sites = {}
   end
