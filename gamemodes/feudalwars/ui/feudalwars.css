@@ -90,6 +90,34 @@ button.act.small { font-size: 12px; padding: 3px 10px; }
 
 .menu table td:first-child b { font-size: 15px; }
 
+.seal-line {
+  text-align: center;
+  margin-bottom: 12px;
+  padding: 8px;
+  border-top: 1px solid #bfae8b;
+  border-bottom: 1px solid #bfae8b;
+}
+
+.seal-line span {
+  font-size: 20px;
+  letter-spacing: 4px;
+  font-variant: small-caps;
+  color: var(--blood);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .4);
+}
+
+#body::-webkit-scrollbar { width: 10px; }
+#body::-webkit-scrollbar-track { background: rgba(43, 33, 24, .1); }
+#body::-webkit-scrollbar-thumb { background: var(--iron); border-radius: 5px; }
+
+table tr:hover td { background: rgba(201, 162, 39, .12); }
+
+input[type="text"]:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+
+button.act:active { transform: translateY(1px); }
+
+button.act:disabled { opacity: .45; cursor: default; }
+
 nav { display: flex; gap: 6px; }
 
 nav button {

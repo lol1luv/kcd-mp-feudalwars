@@ -6,14 +6,20 @@
 <link rel="stylesheet" href="../feudalwars.css">
 </head>
 <body>
-<section class="window" aria-label="Your character">
+<section class="window" aria-label="Character">
   <header>
-    <h1>Your Character</h1>
+    <div class="crest">✦</div>
+    <h1 id="title">Character</h1>
     <button class="close" id="close" type="button" aria-label="Close">&times;</button>
   </header>
   <div id="body">
+    <div class="seal-line"><span id="seal-name"></span></div>
     <dl id="you"></dl>
-    <p class="lead" style="margin-top:16px">The realm's law: wars are declared from the house hall, taxes keep the treasury, and the upkeep of every retainer is paid each minute.</p>
+    <p class="lead" id="law"></p>
+    <div class="hero-buttons">
+      <button class="act gold big" id="go-hall" type="button"></button>
+      <button class="act big" id="go-menu" type="button"></button>
+    </div>
   </div>
   <footer>Feudal Wars &middot; Bohemia, 1403</footer>
 </section>

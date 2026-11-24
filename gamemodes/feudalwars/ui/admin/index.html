@@ -6,14 +6,15 @@
 <link rel="stylesheet" href="../feudalwars.css">
 </head>
 <body>
-<section class="window" aria-label="The admin console">
+<section class="window" aria-label="Admin console">
   <header>
-    <h1>The Crown's Console</h1>
+    <div class="crest">♜</div>
+    <h1 id="title">Crown's console</h1>
     <button class="close" id="close" type="button" aria-label="Close">&times;</button>
   </header>
   <div id="body">
-    <p class="lead">Souls in the realm. Actions land at once; the log below keeps the tale.</p>
-    <table id="players"><thead><tr><th>ID</th><th>Name</th><th>House</th><th>Purse</th><th>Ping</th><th>Actions</th></tr></thead><tbody></tbody></table>
+    <p class="lead" id="lead"></p>
+    <table id="players"><thead><tr><th>ID</th><th id="th-name"></th><th id="th-house"></th><th id="th-purse"></th><th>Ping</th><th id="th-act"></th></tr></thead><tbody></tbody></table>
     <div style="margin-top:14px" id="log"></div>
   </div>
   <footer>Feudal Wars &middot; admin console</footer>

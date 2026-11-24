@@ -39,23 +39,39 @@ local JOBS = {
     label = "the mine", skill = "mining", unit = "ore",
     stock_max = 50, regrow_ms = 600000, work_ms = 8000,
     pay = 6, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+    icon = "troskyQuarry", icon_num = 48,
+    props = {
+      "objects/manmade/common_furniture/barrels/barrel_a.cgf",
+      "objects/manmade/common_furniture/crates/crate_box_a.cgf",
+      "objects/manmade/common_tools/shovel.cgf",
+    },
   },
   farm = {
     label = "the field", skill = "farming", unit = "sheaf",
     stock_max = 60, regrow_ms = 300000, work_ms = 6000,
     pay = 5, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+    icon = "miller", icon_num = 21,
+    props = {
+      "objects/manmade/common_furniture/barrels/barrel_b.cgf",
+      "objects/manmade/common_furniture/crates/crate_low_a.cgf",
+    },
   },
   forest = {
     label = "the logging camp", skill = "woodcutting", unit = "log",
     stock_max = 40, regrow_ms = 450000, work_ms = 7000,
     pay = 5, skill_pay_bonus = 1, skill_speed_bonus = 0.05,
+    icon = "camp", icon_num = 38,
+    props = {
+      "objects/manmade/common_furniture/crates/crate_box_b.cgf",
+      "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
+    },
   },
 }
 
-local job_sites = {}    -- id -> { id, kind, x, y, z, stock }
+local job_sites = {}    -- id -> { id, kind, x, y, z, stock, marker, mapicon, props = {ids}, interact }
 local job_work = {}     -- pid -> { site_id, ready_at }
 local job_skills = {}    -- pid -> { mining = n, farming = n, woodcutting = n }
-local job_interactions = {} -- interaction id -> job kind
+local job_interactions = {} -- interaction id -> site id
 local build_preview = {}  -- pid -> { name, ids, timer }
 
 local function job_skill_of(pid, skill)
@@ -88,12 +104,12 @@ local function job_find_near(pid, kind)
   return best
 end
 
-local function job_work_start(pid, kind)
+local function job_work_start(pid, kind, site_id)
   if job_work[pid] then
     SendClientMessage(pid, COLOR_RED, "you are already working - wait for the shift to end.")
     return
   end
-  local site = job_find_near(pid, kind)
+  local site = (site_id and job_sites[site_id]) or job_find_near(pid, kind)
   if not site then
     SendClientMessage(pid, COLOR_RED, fmt("no %s nearby - walk to %s.", JOBS[kind].label, JOBS[kind].label))
     return
@@ -270,6 +286,7 @@ local function open_me(pid)
   local h = name and houses[name]
   open_frame(pid, "me")
   SendPlayerWebMessage(pid, "me", {
+    lang = lang_of(pid),
     name = GetPlayerName(pid),
     money = GetPlayerMoney(pid),
     house = name,
@@ -304,6 +321,7 @@ local function open_hall(pid)
 
   open_frame(pid, "hall")
   SendPlayerWebMessage(pid, "hall", {
+    lang = lang_of(pid),
     name = GetPlayerName(pid),
     house = name,
     money = GetPlayerMoney(pid),
@@ -338,7 +356,7 @@ local function open_admin(pid)
     }
   end
   open_frame(pid, "admin")
-  SendPlayerWebMessage(pid, "admin", { players = players, log = adminLog })
+  SendPlayerWebMessage(pid, "admin", { lang = lang_of(pid), players = players, log = adminLog })
 end
 
 -- ---------------------------------------------------------------- lifecycle
@@ -398,8 +416,7 @@ function OnGameModeInit()
   job_ensure("farm1", "farm", 8.0, -4.0)
   job_ensure("forest1", "forest", 0.0, -10.0)
 
-  -- visible work sites: compass marker + map icon + foreman NPC + use prompt
-  local JOB_ICON = { mine = "mine", farm = "farm", forest = "camp" }
+  -- visible work sites: compass marker + map icon (real game types) + props + use prompt
   local JOB_NPC = { mine = "Foreman Dobesh", farm = "Reeve Matousek", forest = "Woodward Janek" }
   local mapinfo = GetMapInfo()
   Log(fmt("feudalwars: map folder=%s readOnly=%s objects=%s (level %s)",
@@ -407,29 +424,54 @@ function OnGameModeInit()
     tostring(mapinfo and mapinfo.objects), GetLevel()))
   local icon_types = {}
   for _, t in ipairs(GetMapIconTypes() or {}) do icon_types[t.name or ""] = true end
-  for _, site in pairs(job_sites) do
+  local function job_spawn_visual(site)
     local def = JOBS[site.kind]
-    if def then
-      local mid = CreateMarker(site.x, site.y, site.z + 1.0, MARKER_POINT, 0, def.label)
-      if mid then
-        ShowMarkerForAll(mid)
-      else
-        Log("feudalwars: marker refused for " .. site.id)
-      end
-      local itype = JOB_ICON[site.kind]
-      if not icon_types[itype] then
-        Log(fmt("feudalwars: no map icon type '%s' on %s, using pin", itype, GetLevel()))
-        itype = nil
-      end
-      local iid, ierr = CreateMapIcon(site.x, site.y, site.z,
-        itype and { type = itype, name = def.label } or { icon = 0, name = def.label })
-      if not iid then Log(fmt("feudalwars: map icon refused for %s: %s", site.id, tostring(ierr))) end
-      local npc = CreateActor(nil, site.x + 1.5, site.y, site.z, 0, JOB_NPC[site.kind] or "Foreman", nil, "none", nil)
-      if npc then SetActorPrompt(npc, "Ask about work") end
-      local iid2 = CreateInteraction(site.x, site.y, site.z, "Work here (/job " .. site.kind .. ")")
-      if iid2 then job_interactions[iid2] = site.kind end
+    if not def then return end
+    -- clear old visuals (re-map, reload)
+    if site.marker then pcall(DestroyMarker, site.marker) site.marker = nil end
+    if site.mapicon then pcall(DeleteMapIcon, site.mapicon) site.mapicon = nil end
+    if site.props then for _, pe in ipairs(site.props) do pcall(DestroyEntity, pe) end end
+    site.props = {}
+    if site.interact then pcall(DestroyEntity, site.interact) site.interact = nil end
+    -- compass marker (quest symbol, always drawn)
+    local mid = CreateMarker(site.x, site.y, site.z + 1.0, MARKER_QUEST, 0, def.label)
+    if mid then site.marker = mid ShowMarkerForAll(mid)
+    else Log("feudalwars: marker refused for " .. site.id) end
+    -- map icon: real game type when the level knows it, else the legend icon number
+    local opts
+    if def.icon and icon_types[def.icon] then
+      opts = { type = def.icon, name = def.label }
+    else
+      Log(fmt("feudalwars: no map icon type '%s' on %s, using icon %d", tostring(def.icon), GetLevel(), def.icon_num or 0))
+      opts = { icon = def.icon_num or 0, name = def.label }
+    end
+    local iid, ierr = CreateMapIcon(site.x, site.y, site.z, opts)
+    if iid then site.mapicon = iid
+    else Log(fmt("feudalwars: map icon refused for %s: %s", site.id, tostring(ierr))) end
+    -- physical props: crates, barrels, fireplace - the site looks like a work place
+    for i, mesh in ipairs(def.props or {}) do
+      local px = site.x + (i - 1) * 1.6 - 1.0
+      local pe = CreateProp(mesh, px, site.y + 1.0, site.z, (i * 37) % 360, 1, false, nil)
+      if pe then site.props[#site.props + 1] = pe
+      else Log(fmt("feudalwars: prop refused: %s", mesh)) end
+    end
+    -- foreman NPC with a prompt
+    local npc = CreateActor(nil, site.x + 1.5, site.y, site.z, 0, JOB_NPC[site.kind] or "Foreman", nil, "none", nil)
+    if npc then
+      SetActorPrompt(npc, "Ask about work")
+      site.props[#site.props + 1] = npc
+    end
+    -- E interaction: radius 3m so the prompt actually shows
+    local ie = CreateInteraction(site.x, site.y, site.z, "Work here (" .. site.kind .. ")", 3.0, nil)
+    if ie then
+      site.interact = ie
+      job_interactions[ie] = site.id
+      Log(fmt("feudalwars: interaction %d -> site %s (%s)", ie, site.id, site.kind))
+    else
+      Log("feudalwars: interaction refused for " .. site.id)
     end
   end
+  for _, site in pairs(job_sites) do job_spawn_visual(site) end
 
   -- regrow job stocks on a timer
   SetTimer(function()
@@ -789,18 +831,23 @@ local STR = {
   },
 }
 
+-- Commands NEVER translate (typed in chat as-is). Only titles and descriptions localize.
 local HELP_MENU = {
-  { cmd = "/me", title = { en = "My character", ru = "Мой персонаж" }, desc = { en = "purse, house, standing", ru = "кошель, дом, положение" } },
+  { cmd = "/me", title = { en = "My character", ru = "Мой персонаж" }, desc = { en = "purse, house, standing", ru = "кошелёк, дом, положение" } },
   { cmd = "/hall", title = { en = "House hall", ru = "Зал дома" }, desc = { en = "roster, treasury, wars", ru = "люди, казна, войны" } },
-  { cmd = "/house", title = { en = "House", ru = "Дом" }, desc = { en = "create | join | leave | list | info", ru = "создать | вступить | уйти | список | сведения" } },
-  { cmd = "/war", title = { en = "War", ru = "Война" }, desc = { en = "declare | peace | status", ru = "объявить | мир | счёт" } },
-  { cmd = "/job", title = { en = "Work", ru = "Работа" }, desc = { en = "mine | farm | forest | done | skills", ru = "шахта | поле | лес | забрать | навыки" } },
-  { cmd = "/goto", title = { en = "Go to", ru = "Идти к" }, desc = { en = "mine | farm | forest | spawn", ru = "шахта | поле | лес | площадь" } },
+  { cmd = "/house create|join|leave|list|info", title = { en = "House", ru = "Дом" }, desc = { en = "found, join or leave a house", ru = "создать дом, вступить, уйти, список" } },
+  { cmd = "/war declare|peace|status", title = { en = "War", ru = "Война" }, desc = { en = "declare war, sue for peace, check the score", ru = "объявить войну, заключить мир, счёт" } },
+  { cmd = "/job mine|farm|forest", title = { en = "Work a site", ru = "Работать" }, desc = { en = "start a shift at the mine, field or logging camp", ru = "начать смену на шахте, поле или лесопилке" } },
+  { cmd = "/job done", title = { en = "Collect the shift", ru = "Забрать смену" }, desc = { en = "finish the shift and get paid", ru = "закончить смену и получить плату" } },
+  { cmd = "/job skills", title = { en = "Work skills", ru = "Навыки" }, desc = { en = "your mining, farming, woodcutting levels", ru = "уровни горного дела, поля, лесорубки" } },
+  { cmd = "/goto mine|farm|forest|spawn", title = { en = "Go to a site", ru = "Идти к месту" }, desc = { en = "walk to a work site or the spawn", ru = "перейти к работе или на площадь" } },
+  { cmd = "/jobsite <id|new> <kind>", title = { en = "Map a site (admins)", ru = "Поставить точку (админы)" }, desc = { en = "bind a work site to this place", ru = "привязать работу к этому месту" } },
   { cmd = "/money", title = { en = "Purse", ru = "Кошелёк" }, desc = { en = "count your groschen", ru = "сколько грошей" } },
-  { cmd = "/pay", title = { en = "Pay", ru = "Заплатить" }, desc = { en = "<player> <amount> (5% tax)", ru = "<игрок> <сумма> (налог 5%)" } },
-  { cmd = "/prestige", title = { en = "Prestige", ru = "Престиж" }, desc = { en = "info | raise", ru = "сведения | поднять" } },
-  { cmd = "/build", title = { en = "Build", ru = "Стройка" }, desc = { en = "list | place | cancel", ru = "список | построить | снести" } },
-  { cmd = "/editor", title = { en = "Map editor (admins)", ru = "Редактор карты (админы)" }, desc = { en = "place meshes by hand", ru = "ставить объекты вручную" } },
+  { cmd = "/pay <player> <amount>", title = { en = "Pay", ru = "Заплатить" }, desc = { en = "pay another player (5% house tax)", ru = "передать гроши (налог дому 5%)" } },
+  { cmd = "/prestige info|raise", title = { en = "Prestige", ru = "Престиж" }, desc = { en = "the house's standing", ru = "положение дома" } },
+  { cmd = "/build list|place|cancel", title = { en = "Build", ru = "Стройка" }, desc = { en = "raise a ready structure with a preview", ru = "построить готовое здание с предпросмотром" } },
+  { cmd = "/editor", title = { en = "Map editor (admins)", ru = "Редактор карты (админы)" }, desc = { en = "the game's own editor: fly, place meshes", ru = "встроенный редактор: полёт, объекты" } },
+  { cmd = "/lang en|ru", title = { en = "Language", ru = "Язык" }, desc = { en = "switch the menu language", ru = "сменить язык меню" } },
   { cmd = "/admin", title = { en = "Crown's console (admins)", ru = "Совет короны (админы)" }, desc = { en = "players, kick, ban, money", ru = "игроки, кик, бан, деньги" } },
 }
 
@@ -872,6 +919,36 @@ end, { help = "walk to a work site or the spawn", params = "[mine|farm|forest|sp
 
 local function isAdmin(pid) return IsPlayerAdmin(pid) end
 
+-- map a work site to a real place: stand where the site should be, /jobsite <id|new> <mine|farm|forest>
+RegisterCommand("jobsite", function(pid, args)
+  if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may move work sites."); return end
+  local id, kind = args:match("^(%S*)%s*(%S*)")
+  id, kind = (id or ""):lower(), (kind or ""):lower()
+  if kind == "" or not JOBS[kind] then
+    SendClientMessage(pid, COLOR_RED, "usage: /jobsite <id|new> <mine|farm|forest>")
+    local list = {}
+    for sid, s in pairs(job_sites) do list[#list + 1] = sid .. "=" .. s.kind end
+    SendClientMessage(pid, COLOR_SERVER, "sites: " .. table.concat(list, ", "))
+    return
+  end
+  local px, py, pz = GetPlayerPos(pid)
+  if id == "new" then
+    id = kind .. math.floor(px) .. "_" .. math.floor(py)
+  end
+  local site = job_sites[id] or { id = id }
+  site.kind, site.x, site.y, site.z = kind, px, py, pz
+  site.stock = JOBS[kind].stock_max
+  job_sites[id] = site
+  if db then
+    db:Execute("INSERT INTO job_sites (id, kind, x, y, z, stock) VALUES (@i, @k, @x, @y, @z, @s) " ..
+      "ON DUPLICATE KEY UPDATE kind = @k2, x = @x2, y = @y2, z = @z2, stock = @s2",
+      { i = id, k = kind, x = px, y = py, z = pz, s = site.stock, k2 = kind, x2 = px, y2 = py, z2 = pz, s2 = site.stock }, function() end)
+  end
+  job_spawn_visual(site)
+  SendClientMessage(pid, COLOR_YELLOW, fmt("work site %s (%s) mapped here.", id, kind))
+  Log(fmt("feudalwars: jobsite %s mapped to %.1f %.1f %.1f", id, px, py, pz))
+end, { help = "map a work site to this place", params = "<id|new> <mine|farm|forest>", admin = true })
+
 RegisterCommand("admin", function(pid)
   if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "the crown's console is not yours."); return end
   open_admin(pid)
@@ -918,19 +995,36 @@ end, { help = "travel to a player", params = "<player>", admin = true, secret = 
 local BUILD_CATALOG = {
   tent = {
     label = "a campaign tent", cost = 200,
-    parts = { "objects/manmade/common_fixtures/tents/tent_a.cgf" },
+    parts = { "objects/manmade/structures/living/tents/tent_big_fancy_a.cgf" },
   },
   stall = {
     label = "a market stall", cost = 500,
-    parts = { "objects/manmade/common_furniture/tables/table_market.cgf" },
+    parts = {
+      "objects/manmade/task_specific_props/trade/merge_market_bread_stand.cgf",
+      "objects/manmade/common_furniture/barrels/barrel_a.cgf",
+    },
+  },
+  camp = {
+    label = "a campfire", cost = 150,
+    parts = {
+      "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
+      "objects/manmade/common_furniture/crates/crate_low_a.cgf",
+    },
   },
   palisade = {
     label = "a palisade wall", cost = 800,
-    parts = { "objects/manmade/fortifications/palisade_wall.cgf" },
+    parts = { "objects/manmade/structures/defensive/walls/palisade/palisade_wall_a_v1.cgf" },
   },
   tower = {
     label = "a watch tower", cost = 2000,
-    parts = { "objects/manmade/fortifications/watch_tower.cgf" },
+    parts = { "objects/manmade/structures/defensive/castles/unique/trosky/panna_wooden_tower.cgf" },
+  },
+  forge = {
+    label = "a field forge", cost = 1200,
+    parts = {
+      "objects/manmade/task_specific_props/metal_industry/smithing/anvil.cgf",
+      "objects/manmade/task_specific_props/metal_industry/smithing/forge_small_a.cgf",
+    },
   },
 }
 
@@ -1023,16 +1117,22 @@ function OnPlayerKeyBinding(pid, name, pressed)
 end
 
 function OnPlayerUseMapObject(pid, id)
-  local kind = job_interactions[id]
-  if kind and JOBS[kind] then
-    job_work_start(pid, kind)
+  local site_id = job_interactions[id]
+  local site = site_id and job_sites[site_id]
+  if site then
+    Log(fmt("feudalwars: E on map object %d -> site %s", id, site_id))
+    job_work_start(pid, site.kind, site_id)
   end
 end
 
 function OnPlayerInteract(pid, id)
-  local kind = job_interactions[id]
-  if kind and JOBS[kind] then
-    job_work_start(pid, kind)
+  local site_id = job_interactions[id]
+  local site = site_id and job_sites[site_id]
+  if site then
+    Log(fmt("feudalwars: E on interaction %d -> site %s", id, site_id))
+    job_work_start(pid, site.kind, site_id)
+  else
+    Log(fmt("feudalwars: E on unknown interaction %d (known: %d)", id, #job_interactions))
   end
 end
 
