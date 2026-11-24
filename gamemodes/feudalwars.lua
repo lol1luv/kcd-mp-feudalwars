@@ -116,11 +116,13 @@ end
 
 local function node_persist(n)
   if not db then return end
-  db:Execute("INSERT INTO fw_nodes (id, kind, x, y, z, hp, hp_max, res, respawn_at, mapid) " ..
-    "VALUES (@i, @k, @x, @y, @z, @h, @hm, @r, @ra, @m) " ..
-    "ON DUPLICATE KEY UPDATE kind=@k2, x=@x2, y=@y2, z=@z2, hp=@h2, hp_max=@hm2, res=@r2, respawn_at=@ra2, mapid=@m2",
-    { i = n.key, k = n.kind, x = n.x, y = n.y, z = n.z, h = n.hp, hm = n.hp_max, r = n.res, ra = n.respawn_at or 0, m = n.mapid or 0,
-      k2 = n.kind, x2 = n.x, y2 = n.y, z2 = n.z, h2 = n.hp, hm2 = n.hp_max, r2 = n.res, ra2 = n.respawn_at or 0, m2 = n.mapid or 0 },
+  db:Execute("INSERT INTO fw_nodes (id, kind, x, y, z, hp, hp_max, res, respawn_at, mapid, mesh, label, is_map) " ..
+    "VALUES (@i, @k, @x, @y, @z, @h, @hm, @r, @ra, @m, @me, @lb, @im) " ..
+    "ON DUPLICATE KEY UPDATE kind=@k2, x=@x2, y=@y2, z=@z2, hp=@h2, hp_max=@hm2, res=@r2, respawn_at=@ra2, mapid=@m2, mesh=@me2, label=@lb2, is_map=@im2",
+    { i = n.key, k = n.kind, x = n.x, y = n.y, z = n.z, h = n.hp, hm = n.hp_max, r = n.res, ra = n.respawn_at or 0,
+      m = n.mapid or 0, me = n.mesh or "", lb = n.label or "", im = n.is_map and 1 or 0,
+      k2 = n.kind, x2 = n.x, y2 = n.y, z2 = n.z, h2 = n.hp, hm2 = n.hp_max, r2 = n.res, ra2 = n.respawn_at or 0,
+      m2 = n.mapid or 0, me2 = n.mesh or "", lb2 = n.label or "", im2 = n.is_map and 1 or 0 },
     function() end)
 end
 
@@ -675,7 +677,7 @@ function OnGameModeInit()
     end
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_sites (id VARCHAR(32) PRIMARY KEY, kind VARCHAR(16) NOT NULL DEFAULT 'mine', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, stock INT NOT NULL DEFAULT 0)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS job_skills (player VARCHAR(32), skill VARCHAR(16), level INT NOT NULL DEFAULT 0, PRIMARY KEY (player, skill))")
-    db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_nodes (id VARCHAR(64) PRIMARY KEY, kind VARCHAR(24) NOT NULL DEFAULT 'node', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, hp INT NOT NULL DEFAULT 4, hp_max INT NOT NULL DEFAULT 4, res VARCHAR(16) NOT NULL DEFAULT 'stone', respawn_at BIGINT NOT NULL DEFAULT 0, mapid INT NOT NULL DEFAULT 0)")
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_nodes (id VARCHAR(64) PRIMARY KEY, kind VARCHAR(24) NOT NULL DEFAULT 'node', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, hp INT NOT NULL DEFAULT 4, hp_max INT NOT NULL DEFAULT 4, res VARCHAR(16) NOT NULL DEFAULT 'stone', respawn_at BIGINT NOT NULL DEFAULT 0, mapid INT NOT NULL DEFAULT 0, mesh VARCHAR(255), label VARCHAR(64), is_map TINYINT NOT NULL DEFAULT 0)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_blueprints (name VARCHAR(48) PRIMARY KEY, parts MEDIUMTEXT, cost INT NOT NULL DEFAULT 0, author VARCHAR(32))")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS auction (id INT AUTO_INCREMENT PRIMARY KEY, seller VARCHAR(32), res VARCHAR(16), amount INT NOT NULL DEFAULT 1, price INT NOT NULL DEFAULT 1)")
     local arows = db:QuerySync("SELECT id, seller, res, amount, price FROM auction")
@@ -742,22 +744,41 @@ function OnGameModeInit()
     end
   end
 
-  -- restore saved nodes (state survives a restart)
+  -- restore saved nodes (state survives a restart, blueprint pieces included)
   if db then
-    local nrows = db:QuerySync("SELECT id, kind, x, y, z, hp, hp_max, res, respawn_at, mapid FROM fw_nodes")
+    local nrows = db:QuerySync("SELECT id, kind, x, y, z, hp, hp_max, res, respawn_at, mapid, mesh, label, is_map FROM fw_nodes")
     if nrows then
       for _, r in ipairs(nrows) do
         local def = JOBS[r.kind]
-        local n = node_define({
+        local is_map = (r.is_map == 1) or ((r.mapid or 0) > 0)
+        local mesh = r.mesh
+        if (not mesh or mesh == "") and def then mesh = def.vein_mesh end
+        if is_map and r.mapid and r.mapid > 0 then
+          local mo = GetMapObject(r.mapid)
+          if mo then mesh = mo.mesh end
+        end
+        local n = node_define_noshow({
           key = r.id, kind = r.kind, x = r.x, y = r.y, z = r.z,
-          mesh = def and def.vein_mesh, scale = def and (def.vein_scale or 1.2),
+          mesh = mesh, scale = (def and def.vein_scale) or 1,
           hp = r.hp_max or 4, res = r.res or "stone",
-          label = def and (def.node_label or "the vein"), mapid = r.mapid,
+          label = r.label or ((def and def.node_label) or "the boulder"),
+          is_map = is_map, mapid = r.mapid,
           respawn_at = r.respawn_at or 0,
         })
         n.hp = r.hp or n.hp_max
-        if n.hp <= 0 then
-          if n.entity then pcall(DestroyEntity, n.entity) node_by_entity[n.entity] = nil n.entity = nil end
+        if n.hp > 0 then
+          -- bind the standing object (a prop or a map object)
+          if is_map and r.mapid and r.mapid > 0 then
+            n.entity = r.mapid
+            node_by_entity[r.mapid] = n.key
+          else
+            node_show(n)
+          end
+        else
+          -- broken: make sure nothing stands there
+          if is_map and r.mapid and r.mapid > 0 then
+            pcall(DeleteMapObject, r.mapid)
+          end
         end
       end
       Log("feudalwars: loaded " .. #nrows .. " node(s)")
@@ -771,8 +792,8 @@ function OnGameModeInit()
       if n.hp <= 0 and n.respawn_at > 0 and now >= n.respawn_at then
         n.hp = n.hp_max
         n.respawn_at = 0
-        node_persist(n)
-        node_show(n)
+        node_show(n)          -- recreates a map piece (and persists) or a prop
+        if not n.is_map then node_persist(n) end
       end
     end
   end, 5000, true)
