@@ -259,11 +259,16 @@ end
 
 -- ---------------------------------------------------------------- the web pages
 
+local function open_frame(pid, frame)
+  ShowPlayerWebFrame(pid, frame)
+  SetPlayerWebFocus(pid, frame, true, true)
+  SetPlayerCursor(pid, true)
+end
+
 local function open_me(pid)
   local name = playerHouse[pid]
   local h = name and houses[name]
-  ShowPlayerWebFrame(pid, "me")
-  SetPlayerWebFocus(pid, "me", true, true)
+  open_frame(pid, "me")
   SendPlayerWebMessage(pid, "me", {
     name = GetPlayerName(pid),
     money = GetPlayerMoney(pid),
@@ -297,8 +302,7 @@ local function open_hall(pid)
     wars[#wars + 1] = { enemy = h.war, score = h.score, since = os.date("%H:%M", math.floor(h.war_started / 1000)) }
   end
 
-  ShowPlayerWebFrame(pid, "hall")
-  SetPlayerWebFocus(pid, "hall", true, true)
+  open_frame(pid, "hall")
   SendPlayerWebMessage(pid, "hall", {
     name = GetPlayerName(pid),
     house = name,
@@ -333,8 +337,7 @@ local function open_admin(pid)
       ping = GetPlayerPing(p),
     }
   end
-  ShowPlayerWebFrame(pid, "admin")
-  SetPlayerWebFocus(pid, "admin", true, true)
+  open_frame(pid, "admin")
   SendPlayerWebMessage(pid, "admin", { players = players, log = adminLog })
 end
 
@@ -762,8 +765,7 @@ local HELP_MENU = {
 }
 
 local function open_menu(pid)
-  ShowPlayerWebFrame(pid, "menu")
-  SetPlayerWebFocus(pid, "menu", true, true)
+  open_frame(pid, "menu")
   local cmds = {}
   for _, h in ipairs(HELP_MENU) do cmds[#cmds + 1] = { cmd = h.cmd, desc = h.desc } end
   SendPlayerWebMessage(pid, "menu", { commands = cmds })
@@ -994,13 +996,22 @@ function OnPlayerWebSurfaceEvent(pid, id, name, payload)
   web_event(pid, name, data)
 end
 
+local function close_frame(pid, frame)
+  DestroyPlayerWebFrame(pid, frame)
+  SetPlayerWebFocus(pid, frame, false, false)
+  SetPlayerCursor(pid, false)
+end
+
 local function web_event(pid, name, data)
 
-  if name == "menu.close" then
-    HidePlayerWebFrame(pid, "menu")
+  if name == "menu.cursor" then
+    SetPlayerCursor(pid, true)
+    SetPlayerWebFocus(pid, "menu", true, true)
+  elseif name == "menu.close" then
+    close_frame(pid, "menu")
   elseif name == "menu.run" then
     local cmd = tostring(data.cmd or "")
-    HidePlayerWebFrame(pid, "menu")
+    close_frame(pid, "menu")
     local base = cmd:match("^(%S+)")
     if base == "/me" then open_me(pid)
     elseif base == "/hall" then if playerHouse[pid] then open_hall(pid) end
@@ -1008,9 +1019,9 @@ local function web_event(pid, name, data)
     elseif base == "/menu" or base == "/help" then open_menu(pid)
     else SendClientMessage(pid, COLOR_SERVER, "type it in the chat: " .. cmd) end
   elseif name == "me.close" then
-    HidePlayerWebFrame(pid, "me")
+    close_frame(pid, "me")
   elseif name == "house.close" then
-    HidePlayerWebFrame(pid, "hall")
+    close_frame(pid, "hall")
   elseif name == "house.donate" then
     local amount = math.floor(tonumber(data.amount) or 0)
     local hname = playerHouse[pid]
@@ -1062,7 +1073,7 @@ local function web_event(pid, name, data)
       open_hall(pid)
     end
   elseif name == "admin.close" then
-    HidePlayerWebFrame(pid, "admin")
+    close_frame(pid, "admin")
   elseif isAdmin(pid) then
     if name == "admin.kick" then
       Kick(data.id, data.reason or "the crown wills it")

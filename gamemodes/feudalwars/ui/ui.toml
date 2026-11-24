@@ -8,7 +8,7 @@ version = "1"
 page = "me/index.html"
 preload = true
 z = 310
-focus = "input"
+focus = "open"
 events_out = ["me.*"]
 
 # The house's hall (/house menu): roster, treasury, wars, prestige. The mode sends
@@ -17,7 +17,7 @@ events_out = ["me.*"]
 page = "hall/index.html"
 preload = true
 z = 320
-focus = "input"
+focus = "open"
 events_out = ["house.*"]
 
 # The realm's admin console (/admin ui): online list, live chat feed, kick/ban buttons, treasury edits.
@@ -27,7 +27,7 @@ events_out = ["house.*"]
 page = "admin/index.html"
 preload = true
 z = 330
-focus = "input"
+focus = "open"
 events_out = ["admin.*"]
 
 # A notice in the corner for a moment: earnings, taxes, war news. The mode sends {text}.
@@ -42,5 +42,5 @@ z = 200
 page = "menu/index.html"
 preload = true
 z = 300
-focus = "input"
+focus = "open"
 events_out = ["menu.*"]
