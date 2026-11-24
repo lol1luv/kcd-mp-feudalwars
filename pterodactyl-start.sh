@@ -58,7 +58,19 @@ else
       mv -f ./start.sh.new ./start.sh
       mkdir -p gamemodes
       cp -f "$SRC_DIR"/gamemodes/feudalwars.lua ./gamemodes/feudalwars.lua
+      # full sync of the UI folder: delete stale files (incl. nested feudalwars/feudalwars from the old cp bug), then copy exact
+      rm -rf ./gamemodes/feudalwars
+      mkdir -p ./gamemodes/feudalwars
       cp -rf "$SRC_DIR"/gamemodes/feudalwars/. ./gamemodes/feudalwars/
+      # report drift: files on disk that git does not have (leftovers, manual edits)
+      (cd "$SRC_DIR" && find gamemodes/feudalwars -type f | sort > "$UPDTMP/git_ui.txt")
+      (cd ./gamemodes && find feudalwars -type f | sort > "$UPDTMP/disk_ui.txt")
+      if ! diff "$UPDTMP/git_ui.txt" "$UPDTMP/disk_ui.txt" >/dev/null; then
+        echo "UI drift (disk vs git):"
+        diff "$UPDTMP/git_ui.txt" "$UPDTMP/disk_ui.txt" || true
+      else
+        echo "UI in sync with git."
+      fi
       chmod +x KcdMp.Server start.sh
       echo "$REMOTE_SHA" > .fw_version
       echo "Updated to $REMOTE_SHA."
