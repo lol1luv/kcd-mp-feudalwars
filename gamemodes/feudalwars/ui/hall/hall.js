@@ -61,6 +61,7 @@
   const emit = (name, payload) => KcdMp.emitServer(name, payload || {});
 
   $("close").addEventListener("click", () => emit("house.close"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") emit("house.close"); });
   $("donate").addEventListener("click", () => emit("house.donate", { amount: 100 }));
   $("prestige").addEventListener("click", () => emit("house.prestige"));
   $("declare").addEventListener("click", () => emit("house.declare", { enemy: $("enemyName").value.trim() }));

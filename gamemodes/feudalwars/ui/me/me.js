@@ -32,4 +32,5 @@
   });
 
   $("close").addEventListener("click", () => KcdMp.emitServer("me.close"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") KcdMp.emitServer("me.close"); });
 })();

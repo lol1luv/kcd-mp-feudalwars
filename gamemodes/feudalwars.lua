@@ -263,6 +263,7 @@ local function open_me(pid)
   local name = playerHouse[pid]
   local h = name and houses[name]
   ShowPlayerWebFrame(pid, "me")
+  SetPlayerWebFocus(pid, "me", true, true)
   SendPlayerWebMessage(pid, "me", {
     name = GetPlayerName(pid),
     money = GetPlayerMoney(pid),
@@ -297,6 +298,7 @@ local function open_hall(pid)
   end
 
   ShowPlayerWebFrame(pid, "hall")
+  SetPlayerWebFocus(pid, "hall", true, true)
   SendPlayerWebMessage(pid, "hall", {
     name = GetPlayerName(pid),
     house = name,
@@ -332,6 +334,7 @@ local function open_admin(pid)
     }
   end
   ShowPlayerWebFrame(pid, "admin")
+  SetPlayerWebFocus(pid, "admin", true, true)
   SendPlayerWebMessage(pid, "admin", { players = players, log = adminLog })
 end
 
@@ -395,15 +398,29 @@ function OnGameModeInit()
   -- visible work sites: compass marker + map icon + foreman NPC + use prompt
   local JOB_ICON = { mine = "mine", farm = "farm", forest = "camp" }
   local JOB_NPC = { mine = "Foreman Dobesh", farm = "Reeve Matousek", forest = "Woodward Janek" }
+  local mapinfo = GetMapInfo()
+  Log(fmt("feudalwars: map folder=%s readOnly=%s objects=%s (level %s)",
+    tostring(mapinfo and mapinfo.folder), tostring(mapinfo and mapinfo.readOnly),
+    tostring(mapinfo and mapinfo.objects), GetLevel()))
+  local icon_types = {}
+  for _, t in ipairs(GetMapIconTypes() or {}) do icon_types[t.name or ""] = true end
   for _, site in pairs(job_sites) do
     local def = JOBS[site.kind]
     if def then
       local mid = CreateMarker(site.x, site.y, site.z + 1.0, MARKER_POINT, 0, def.label)
-      if mid then ShowMarkerForAll(mid) end
-      local ok, iid = pcall(CreateMapIcon, site.x, site.y, site.z, { type = JOB_ICON[site.kind] or "camp", name = def.label })
-      if not ok or not iid then
-        CreateMapIcon(site.x, site.y, site.z, { icon = 0, name = def.label })
+      if mid then
+        ShowMarkerForAll(mid)
+      else
+        Log("feudalwars: marker refused for " .. site.id)
       end
+      local itype = JOB_ICON[site.kind]
+      if not icon_types[itype] then
+        Log(fmt("feudalwars: no map icon type '%s' on %s, using pin", itype, GetLevel()))
+        itype = nil
+      end
+      local iid, ierr = CreateMapIcon(site.x, site.y, site.z,
+        itype and { type = itype, name = def.label } or { icon = 0, name = def.label })
+      if not iid then Log(fmt("feudalwars: map icon refused for %s: %s", site.id, tostring(ierr))) end
       local npc = CreateActor(nil, site.x + 1.5, site.y, site.z, 0, JOB_NPC[site.kind] or "Foreman", nil, "none", nil)
       if npc then SetActorPrompt(npc, "Ask about work") end
       local iid2 = CreateInteraction(site.x, site.y, site.z, "Work here (/job " .. site.kind .. ")")
@@ -430,6 +447,14 @@ function OnGameModeInit()
   SetShopItem(shop, "bread", 5, -1)
   SetShopItem(shop, "water", 3, -1)
   CreateVendor(shop, "provisioner", sx + 2.0, sy + 2.0, sz, syaw + 180.0, "Provisioner Bohush", nil, nil)
+
+  -- hotkeys: E = work where you stand, F = collect, F2/F3/F4 = me/hall/admin
+  RegisterKeyBinding("fw.work", "Feudal Wars: start work here", "e")
+  RegisterKeyBinding("fw.done", "Feudal Wars: collect the shift", "f")
+  RegisterKeyBinding("fw.menu", "Feudal Wars: command menu", "f1")
+  RegisterKeyBinding("fw.me", "Feudal Wars: character page", "f2")
+  RegisterKeyBinding("fw.hall", "Feudal Wars: house hall", "f3")
+  RegisterKeyBinding("fw.admin", "Feudal Wars: admin console", "f4")
 
   -- upkeep and war expiry, once a minute
   SetTimer(function()
@@ -532,6 +557,14 @@ function OnPlayerSpawn(pid)
   if name then
     local h = houses[name]
     SendClientMessage(pid, COLOR_SERVER, fmt("You serve the house of %s. Treasury: %d, prestige: %d.", name, h.treasury, h.prestige))
+  end
+  AddPlayerActionHint(pid, "fw-menu", "f1", "Commands", { binding = "fw.menu" })
+  AddPlayerActionHint(pid, "fw-work", "e", "Work here", { binding = "fw.work" })
+  AddPlayerActionHint(pid, "fw-done", "f", "Collect shift", { binding = "fw.done" })
+  AddPlayerActionHint(pid, "fw-me", "f2", "Character", { binding = "fw.me" })
+  AddPlayerActionHint(pid, "fw-hall", "f3", "House hall", { binding = "fw.hall" })
+  if isAdmin(pid) then
+    AddPlayerActionHint(pid, "fw-admin", "f4", "Admin console", { binding = "fw.admin" })
   end
 end
 
@@ -736,12 +769,21 @@ local HELP_MENU = {
   { cmd = "/admin", desc = "open the crown's console (admins)" },
 }
 
+local function open_menu(pid)
+  ShowPlayerWebFrame(pid, "menu")
+  SetPlayerWebFocus(pid, "menu", true, true)
+  local cmds = {}
+  for _, h in ipairs(HELP_MENU) do cmds[#cmds + 1] = { cmd = h.cmd, desc = h.desc } end
+  SendPlayerWebMessage(pid, "menu", { commands = cmds })
+end
+
 RegisterCommand("help", function(pid)
-  SendClientMessage(pid, COLOR_YELLOW, "Feudal Wars - commands:")
-  for _, h in ipairs(HELP_MENU) do
-    SendClientMessage(pid, COLOR_SERVER, h.cmd .. " - " .. h.desc)
-  end
+  open_menu(pid)
 end, { help = "list all commands with descriptions" })
+
+RegisterCommand("menu", function(pid)
+  open_menu(pid)
+end, { help = "open the command menu" })
 
 RegisterCommand("goto", function(pid, args)
   local where = (args:match("^(%S*)") or ""):lower()
@@ -885,9 +927,46 @@ end, { help = "raise a ready structure with a preview", params = "[list|place <n
 
 RegisterCommand("editor", function(pid)
   if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may shape the land."); return end
+  if not IsPlayerWebReady(pid) then
+    SendClientMessage(pid, COLOR_RED, "the editor needs the web layer: enable server interfaces in the launcher options and relog.")
+    return
+  end
   local ok, err = SetPlayerEditor(pid, "admin")
-  if not ok then SendClientMessage(pid, COLOR_RED, "the editor refuses: " .. tostring(err)) end
+  if ok then
+    SendClientMessage(pid, COLOR_YELLOW, "the map editor is open: fly, pick meshes from the panel, place with the mouse. /editor close to shut it.")
+  else
+    SendClientMessage(pid, COLOR_RED, "the editor refuses: " .. tostring(err))
+  end
 end, { help = "open the map editor (admins)", admin = true })
+
+function OnPlayerKeyBinding(pid, name, pressed)
+  if not pressed then return end
+  if name == "fw.work" then
+    local px, py, pz = GetPlayerPos(pid)
+    local best, bestd, bestkind = nil, 6.0, nil
+    for _, site in pairs(job_sites) do
+      local dx, dy, dz = site.x - px, site.y - py, site.z - pz
+      local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+      if d < bestd then best, bestd, bestkind = site, d, site.kind end
+    end
+    if bestkind then job_work_start(pid, bestkind)
+    else SendClientMessage(pid, COLOR_RED, "no work site here - walk to a marked site (/goto mine|farm|forest).") end
+  elseif name == "fw.done" then
+    job_work_collect(pid)
+  elseif name == "fw.menu" then
+    open_menu(pid)
+  elseif name == "fw.me" then
+    open_me(pid)
+  elseif name == "fw.hall" then
+    if not playerHouse[pid] then
+      SendClientMessage(pid, COLOR_RED, "you serve no lord - /house create <name> or /house join <name> first.")
+    else
+      open_hall(pid)
+    end
+  elseif name == "fw.admin" then
+    if isAdmin(pid) then open_admin(pid) end
+  end
+end
 
 function OnPlayerUseMapObject(pid, id)
   local kind = job_interactions[id]
@@ -917,11 +996,36 @@ end
 
 -- ---------------------------------------------------------------- web events
 
+-- UI frames talk via KcdMp.emitServer -> OnClientEvent (source = frame name).
+-- OnPlayerWebSurfaceEvent is only for in-world boards (CreateWebSurface), which we don't use.
+function OnClientEvent(pid, name, payload, source)
+  local data = {}
+  if payload and payload ~= "" then
+    if payload:sub(1, 1) == "{" then data = JsonDecode(payload) or {} end
+  end
+  web_event(pid, name, data)
+end
+
 function OnPlayerWebSurfaceEvent(pid, id, name, payload)
   local data = {}
   if payload and payload ~= "" then data = JsonDecode(payload) or {} end
+  web_event(pid, name, data)
+end
 
-  if name == "me.close" then
+local function web_event(pid, name, data)
+
+  if name == "menu.close" then
+    HidePlayerWebFrame(pid, "menu")
+  elseif name == "menu.run" then
+    local cmd = tostring(data.cmd or "")
+    HidePlayerWebFrame(pid, "menu")
+    local base = cmd:match("^(%S+)")
+    if base == "/me" then open_me(pid)
+    elseif base == "/hall" then if playerHouse[pid] then open_hall(pid) end
+    elseif base == "/admin" then if isAdmin(pid) then open_admin(pid) end
+    elseif base == "/menu" or base == "/help" then open_menu(pid)
+    else SendClientMessage(pid, COLOR_SERVER, "type it in the chat: " .. cmd) end
+  elseif name == "me.close" then
     HidePlayerWebFrame(pid, "me")
   elseif name == "house.close" then
     HidePlayerWebFrame(pid, "hall")

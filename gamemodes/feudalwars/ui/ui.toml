@@ -35,3 +35,12 @@ events_out = ["admin.*"]
 page = "notice/index.html"
 preload = true
 z = 200
+
+# The command menu (F1 or /menu): every command with its description, click to run.
+# The mode sends menu.show {commands: [{cmd, desc}]}; the page sends menu.close, menu.run {cmd}.
+[frames.menu]
+page = "menu/index.html"
+preload = true
+z = 300
+focus = "input"
+events_out = ["menu.*"]

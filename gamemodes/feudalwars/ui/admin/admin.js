@@ -47,4 +47,5 @@
   });
 
   $("close").addEventListener("click", () => KcdMp.emitServer("admin.close"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") KcdMp.emitServer("admin.close"); });
 })();
