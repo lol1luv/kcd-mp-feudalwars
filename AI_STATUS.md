@@ -71,6 +71,7 @@
 - `sdk/KcdMp.d.lua`: API (~13000 строк).
 
 ## 8. Лог изменений
+- `8a4bddc` (2026-11-24): start.sh принудительно прописывает `level = "$LEVEL"` в server.toml (Wings иногда не переписывает его из Startup-переменной).
 - `a6a2de5` (2026-11-24): главное меню на F2 (F1 занят фоторежимом), меню-хаб с кнопками Character/House hall/Crown's console, убраны отдельные бинды F2-F4.
 - `e223763` (2026-11-24): UI events via OnClientEvent (emitServer!), key bindings E/F/F1-F4, action hints, menu frame, editor web check, marker diagnostics, Esc closes frames, SetPlayerWebFocus on open.
 - `1837202` (2026-11-24): visible job sites, /help, /goto, /build preview, /editor, kutnohorsko default.
