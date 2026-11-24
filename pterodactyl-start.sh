@@ -25,6 +25,17 @@ else
   echo "WARNING: no server.toml, the server will use its own defaults."
 fi
 
+# The map must be on, or CreateMapObject is refused ("no map") and nothing the mode
+# builds appears. Add [world] map if the file lacks it (older installs).
+if [ -f server.toml ] && ! grep -qE '^[[:space:]]*map[[:space:]]*=' server.toml; then
+  if grep -qE '^\[world\]' server.toml; then
+    sed -i -E '0,/^\[world\]/s//[world]\nmap = "data\/maps\/{level}"/' server.toml
+  else
+    printf '\n[world]\nmap = "data/maps/{level}"\n' >> server.toml
+  fi
+  echo "server.toml: [world] map enabled"
+fi
+
 sha_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
 if [ "${AUTO_UPDATE:-1}" != "1" ]; then
