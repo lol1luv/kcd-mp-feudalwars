@@ -16,6 +16,7 @@ discord = ""                 # an invite - "https://discord.gg/abc123" - a Disco
 tags = []                    # up to 8 short words: ["roleplay", "pvp", "whitelist"]
 language = ""                # the language the players speak there: "en", "ru", "de", "pt-br" ...
 discord_status = "show"      # players' Discord status: "show" (the name, a button to the discord invite or website), "no_links" (the name alone), "private" (neither)
+discord_show_place = true    # false keeps the town or castle a player stands in off their Discord status (the level's name stays) - for roleplay servers
 port = 7777
 max_players = 32
 password = ""                # "" = open server
@@ -52,6 +53,7 @@ pool = 8                            # connections at most
 timeout_seconds = 10                # per query
 max_rows = 10000                    # a query returning more is refused with an error
 slow_query_ms = 500                 # a query taking longer gets a log line
+keep_open_seconds = 30              # the mode's calls share one open connection while they come within this; 0 = one per call
 
 # The game mode's client half: Lua files sent to every joining player and run in their game, sandboxed to the game.
 # https://docs.kcd-mp.com/getting-started/server-config/#client
@@ -170,6 +172,12 @@ guarded_categories = "Armor,MeleeWeapon,MissileWeapon,Ammo,Helmet,Hood,Money"   
 policy = "any"               # any | allow_list (only the ones below) | none
 allowed = []                 # with allow_list: mod ids (a mod.manifest's modid), e.g. ["smithsreach"]
 refused = []                 # never, whatever the policy
+# The server's own mods, sent to every player's game when they join: one folder per mod inside the folder below, laid out as a mod in
+# the game's Mods folder (mod.manifest, Data/*.pak, Localization/*.pak). Only those files go (never mod.cfg); a mod's scripts run
+# without native code on the players' games.
+folder = "mods"              # "" = no mods of the server's own; after a change, "mods reload" in the server's console (new joins get it)
+download_url = ""            # an https:// mirror of the mods folder as it is (<url>/<mod folder>/<file>), tried before the server itself
+max_downloads = 8            # mod files the server sends at once (1..64); the rest wait their turn
 
 # Combat: damage, stamina, injuries, fights, drink. The server owns every player's health.
 # https://docs.kcd-mp.com/getting-started/server-config/#combat

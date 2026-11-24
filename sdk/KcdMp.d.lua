@@ -2662,8 +2662,10 @@ function GetPlayerInventory(pid) end
 ---what is taken is an exact order the game carries out. An entry's `health` is the condition its items should have (0..100,
 ---`100` when left out): a missing item is made at it, and an item they already hold is set to it. Its `quality` (1..4, left out =
 ---the class's own) is the same: a missing item is made at that quality, one they hold is set to it. An entry with `worn = true` is
----put on (given first when they miss it; nothing happens when they wear one of the class already). Nothing is taken off: what they
----wear and the list keeps stays on, and what the list leaves out goes (the game takes it off them). Called twice before the
+---put on (given first when they miss it; nothing happens when they wear one of the class already) - a tagged item they hold too, so
+---a held piece goes on without taking it out of the bag first. Nothing is taken off: `worn = false` (or left out) on a piece they
+---wear leaves it on, what the list leaves out goes (the game takes it off them). To take a piece off and keep it in the bag, use
+---`SetPlayerItemWorn`. Called twice before the
 ---first call's orders are done, it orders nothing twice, so it is safe at any moment - a spawn, a death, a login - and the
 ---restore of a saved character may follow it with `GetPlayerInventory` and save at once. The log says
 ---`SetPlayerInventory: N given, M taken`. An entry with an `id` is one of the mode's **tagged items**
@@ -2673,6 +2675,21 @@ function GetPlayerInventory(pid) end
 ---@param items table a list of `{class=, amount=, health=, quality=, worn=}` (`amount` 1 and `health` 100 when left out, `quality` the class's own, `worn` to put it on; `id`, `name`, `text` for a tagged item), as `GetPlayerInventory` returns it
 ---@return boolean `false` when not connected
 function SetPlayerInventory(pid, items) end
+
+---Puts one of the player's items on, or takes it off, and leaves it in their bag.
+---
+---A tagged item by its `id` (`GivePlayerTaggedItem`), or else any item of a class (any key of
+---the item catalogue). Their game puts it on or takes it off the way the inventory screen does - a weapon
+---into or out of its weapon set - and reports it like the player's own change (`GetPlayerEquipment`,
+---`OnPlayerInventoryChange`); the item stays in the bag with its tag, condition and quality. Nothing happens when one of the class
+---is on already (put on) or none is (taken off). A player can wear one item of a class at a time, so with two of a class in the bag
+---the put-on of a tagged one may dress the other. Use it to dress and undress a player whose bag `SetPlayerInventory` keeps:
+---that function only ever puts on.
+---@param pid number the player
+---@param idOrClass string a tagged item's id, or an item class
+---@param worn? boolean `true` (or left out) puts it on, `false` takes it off
+---@return boolean `false` when they hold no item with that id and none of that class
+function SetPlayerItemWorn(pid, idOrClass, worn) end
 
 ---Takes every item the player holds - or all but what they wear.
 ---
@@ -2715,7 +2732,8 @@ function SetPlayerOutfits(pid, outfits) end
 ---(`shortswordBroad`), the English name (`Duelling longsword`) or the class GUID; an unknown key is logged and nothing
 ---happens. A gift is a record of the server's: the item counts as the player's the moment it is given, their game makes it a
 ---moment later and tells the server, and the item check never sees it as unexplained. A take is an exact order the player's
----game carries out - an item they carry in a hand or wear is released first. The `/give` built-in is the same call. One call
+---game carries out - an item they carry in a hand or wear is released first; which piece of the class goes is the game's choice
+---(to take the piece at a condition, use `TakePlayerItem`). The `/give` built-in is the same call. One call
 ---makes up to 5000 of a class (the same for `SetPlayerInventory` and `SetHorseItems`); give more in several calls.
 ---@param pid number the player
 ---@param item string|number the item's name, id, English name or GUID
@@ -2724,6 +2742,26 @@ function SetPlayerOutfits(pid, outfits) end
 ---@param quality? number the quality the items are made at, 1..4 (I..IV; left out = the class's own - a quality past what the class can be is its best)
 ---@return boolean `false` when not connected
 function GivePlayerItem(pid, item, amount, health, quality) end
+
+---Takes chosen pieces out of the player's inventory - the ones at a condition and quality.
+---
+---A negative `GivePlayerItem` takes *any* pieces of a class: the player's game picks which, and with three swords at 52, 77 and
+---83 % it takes the newest. `TakePlayerItem` names the piece. Each piece it takes is the one the player carries nearest `health`
+---(within one point, the game's rounding) and of `quality`; with `health` left out it takes the worst first. A piece the player
+---wears goes only when no carried one matches. The take is the same exact order a sale's is: each piece goes by its own id, an
+---item in a hand or worn is released first, and `GetPlayerInventory` lacks that very piece at once - so a mode that moves an
+---item into a chest, a cart or a market stall books the condition that really left. Your own tagged items
+---(`GivePlayerTaggedItem`) are never taken, and neither is the purse (`GivePlayerMoney`).
+---
+---It returns how many it ordered and the pieces themselves, each as `GetPlayerInventory` lists an item: book those. When the
+---player holds fewer such pieces than `amount`, it takes the ones there are; `0` and an empty list mean no piece matched, and
+---nothing was taken.
+---@param pid number the player
+---@param item string|number the item's name, id, English name or GUID
+---@param amount? number how many (`1`)
+---@param health? number the condition of the pieces to take, 0..100 (left out = the worst first)
+---@param quality? number the quality of the pieces to take, 1..4 (left out = any)
+function TakePlayerItem(pid, item, amount, health, quality) end
 
 ---The condition of the player's item of a class.
 ---
@@ -2945,7 +2983,8 @@ function GetItemClassPrice(item) end
 ---- `stack` - `false` keeps every piece in a row of its own (by default pieces stack when the base does)
 ---
 ---From then on its `name` is an item like any other: give it with `GivePlayerItem` (`GivePlayerItem(pid, "ironore", 20)`), list it
----in `SetPlayerInventory`, a chest (`SetContainerItems`), a horse's bags, a body's loot or a shop (`SetShopItem`), lay it with
+---in `SetPlayerInventory`, a chest (`SetContainerItems`), a horse's bags, a body's loot or a shop - sold by `SetShopItem`, bought
+---back by `SetShopBuyPrice` under its own name and price, never as its base (`OnPlayerBuy` / `OnPlayerSell` name it) - lay it with
 ---`CreatePickup`. `GetPlayerInventory` and every other list name its pieces by it, so a mode that saves what players carry saves
 ---them as they are. Its pieces stack only with each other - never with the plain base item or another of your items - and a removal
 ---by its name (`GivePlayerItem` with a negative amount) takes only them.
@@ -3319,6 +3358,7 @@ function HideTutorial(pid, id) end
 ---| `HUD_COMMON_EVENT` | one of the game's two event banners - `ShowNotification` and `ShowObjectiveEvent` draw in them |
 ---| `HUD_FANCY_EVENT` | the other event banner |
 ---| `HUD_TUTORIAL_MESSAGE` | the tutorial box - `ShowTutorial`, the party's invitation and the death box |
+---| `HUD_ITEM_TRANSFER` | the game's "You received" and "You parted with" popups - a herb picked, loot taken, items or money given or taken - items and money alike; the items still move, only the popup goes |
 ---
 ---**Five of these are the slots of the mode's own toasts**: hiding `HUD_INFO_TEXT`, `HUD_GAME_LOG`,
 ---`HUD_COMMON_EVENT`, `HUD_FANCY_EVENT` or `HUD_TUTORIAL_MESSAGE` hides what the mode and the server show there as well - a
@@ -3327,9 +3367,11 @@ function HideTutorial(pid, id) end
 ---
 ---The name is read loosely - case, `_`, `-` and spaces do not count, so `"InfoText"` is `HUD_INFO_TEXT` - and a name that is
 ---no piece is refused with `"no such piece"`. The setting is the `hud` component's option of that name
----(`SetPlayerInterfaceOptions` sets the same thing, and `SetInterfaceOptionsForAll` does it for everyone); it holds until the
+---(`SetPlayerInterfaceOptions` sets the same thing, and `SetHudVisibleForAll` does it for everyone); it holds until the
 ---mode changes it, the player leaves or the mode is reloaded, and a player's game puts the piece back as it found it
 ---when the session ends - a player's own choice in the game's settings survives.
+---
+---`HUD_ITEM_TRANSFER` needs a player's game of the KCD:MP release after 0.50.0; an older one keeps its popups.
 ---
 ---The answer is `true` when the request was handed to the player's game, or `false` and the reason: `"no such player"` or
 ---`"no such piece"`.
@@ -3339,6 +3381,23 @@ function HideTutorial(pid, id) end
 ---@return boolean ok `true`, or `false, reason` - the reason as a person reads it (`"no such piece"`, `"no such player"`)
 ---@return string reason
 function SetPlayerHudVisible(pid, piece, visible) end
+
+---Shows or hides one of the game's own HUD pieces on every player's screen, and on the screens of whoever joins later.
+---
+---`SetPlayerHudVisible` for everyone: the same pieces, the same `HUD_*` constants, the same loose reading of the name. A
+---server whose own notices replace the game's "You received" popups hides `HUD_ITEM_TRANSFER` once, in `OnGameModeInit`,
+---and every player - the ones online and the ones who join later - plays without them.
+---
+---A player's own setting of the piece (`SetPlayerHudVisible`) gives way to this call; a later `SetPlayerHudVisible`
+---for that player wins again. It is the `hud` component's option of that name, as `SetInterfaceOptionsForAll` sets it,
+---and it holds until the mode changes it or is reloaded.
+---
+---The answer is `true`, or `false` and `"no such piece"`.
+---@param piece string a piece - `HUD_ITEM_TRANSFER`, `HUD_COMPASS` ... - as `SetPlayerHudVisible` lists them
+---@param visible boolean `true` shows the piece (the default state), `false` hides it
+---@return boolean ok `true`, or `false, reason` - the reason as a person reads it (`"no such piece"`)
+---@return string reason
+function SetHudVisibleForAll(piece, visible) end
 
 -- ======== Compass markers =======================================================
 -- A **compass marker** is a point in the level a mode shows to the players it chooses, as a blip on the game's own compass
@@ -4932,6 +4991,109 @@ function GetHorseTypeRule(type) end
 ---@return table the names, `"draft"` and `"riding"` among them
 function GetHorseTypes() end
 
+-- ======== Object prompts ========================================================
+-- The game's own objects in the level show **use prompts** of their own: a cooking pot offers "Eat from kettle" (press the use key)
+-- and "Pour the potion" (hold it), a wash tub "Wash", a bench "Sit", a bed "Sleep and save", a smokehouse "Smoke". A mode can
+-- **change those prompts** - give one a text of its own, take it away, or **take it over**, so that the key does what the mode
+-- says instead of what the game does. Nobody installs anything; the rules reach every player from the moment they join.
+-- 
+-- A rule names a prompt by the game's **text key** of it - the same keys `SetTextOverride` takes. The common ones:
+-- 
+-- | Key | The prompt | On |
+-- |---|---|---|
+-- | `ui_eat_kettle` | Eat from kettle | a cooking pot (press) |
+-- | `ui_put_into_kettle` | Pour the potion | a cooking pot (hold) |
+-- | `ui_drink_barrel` | Drink | a wine or beer barrel |
+-- | `ui_use_wash` | Wash | a wash tub, a water trough |
+-- | `notifikac_vyprat_pradlo_eZfq` | Wash clothes | a wash tub (hold) |
+-- | `ui_cook_item` | Cook | a fireplace's spit or pan |
+-- | `ui_use_dryer` / `ui_use_smokehouse` | Dry / Smoke | a drying rack, a smokehouse |
+-- | `ui_use_sit` | Sit | a bench, a chair, a bed's edge |
+-- | `ui_hud_sleep_and_save` | Sleep and save | a bed (press or hold) |
+-- | `ui_hud_untie` | Untie | a tied horse's post |
+-- | `kajicna_p_pomodlit_se_BFAT` | Pray | a shrine, a cross |
+-- | `push_ladder` | Push the ladder away | a siege ladder (hold) |
+-- 
+-- A rule works on **every** object of the level that shows that prompt - all the pots - or only on those within an **area** (a
+-- point and a radius): the pot in the inn. Where several rules cover the same object's prompt, the one with the smallest area wins,
+-- then the newest; so a rule for every pot and another for the inn's pot can live side by side.
+-- 
+-- What a rule does:
+-- 
+-- - **`text`** - the prompt reads the mode's words (as written, or `"@"` and a key of the game's texts, which the game translates).
+--   The game's own action stays: "Taste the stew" still eats from the pot.
+-- - **`hide`** - the prompt is gone; the player cannot do it there.
+-- - **`take`** - the prompt stays (with the mode's text, if it gave one), but the **game does nothing**: nobody eats, nothing is
+--   poured, nobody sits down. The use key calls `OnPlayerUseObject` instead, and what happens is the mode's to write - a price, a
+--   dialogue, a buff, a message. A taken prompt is always usable: the game's own reasons for greying it out (a full belly, an empty
+--   pot) are the mode's to judge.
+-- 
+-- Only the player's own prompts change; the NPCs use the objects as they always did. A rule is the mode's until it removes it or the
+-- mode is reloaded: set them in `OnGameModeInit`. At most 64 rules. Seats and beds have their own callbacks as well
+-- (`OnPlayerSeatChange`, `OnPlayerSleep`); a rule that takes "Sit" or "Sleep" over stops the game's own sitting or sleeping
+-- there, so those no longer fire for it.
+
+---**Called by the server** - A player used a game object's prompt that a rule of the mode's takes over - the game did nothing.
+---
+---Fires when a player within reach presses (or, for a held prompt, holds) the use key on a prompt a `SetObjectPrompt` rule with
+---`take` covers. `name` is the object's name in the level - big levels give one name to several objects, so tell them apart by the
+---place `x, y, z` (metres).
+---@param pid number the player
+---@param id string the rule's id
+---@param prompt string the prompt's text key (`"ui_eat_kettle"`)
+---@param hold boolean `true` for the held prompt (a pot's "Pour the potion"), `false` for the pressed one
+---@param name string the object's name in the level
+---@param x number the object's place, metres
+---@param y number metres
+---@param z number metres
+function OnPlayerUseObject(pid, id, prompt, hold, name, x, y, z) end
+
+---Changes a prompt of the game's own objects - its text, hides it, or takes it over for the mode.
+---
+---`id` is the rule's name of the mode's choosing (1 to 32 of `a-z 0-9 _ . : -`); setting a rule with an id that is already there
+---replaces it. `prompt` is the game's text key of the prompt (`"ui_eat_kettle"`; a leading `@` and capitals are fine) - the table
+---above lists the common ones.
+---
+---The options:
+---
+---| Key | |
+---|---|---|
+---| `text` | the prompt's words instead of the game's: as written (at most 48 characters), or `"@"` and a key of the game's texts |
+---| `hide` | `true`: the prompt is gone (goes alone - not with `text` or `take`) |
+---| `take` | `true`: the game's own action does not run; the use key calls `OnPlayerUseObject` |
+---| `x`, `y`, `z` | only the objects near this point (metres); without them, every object of the level that shows the prompt |
+---| `radius` | the area's radius in metres, `0.5` to `500` (`3` by default) |
+---
+---Give at least one of `text`, `hide` and `take`. The narrowest rule over an object wins, then the newest. The players see the
+---change at once (an object they look at right now shows it the next time they look at it).
+---
+---The answer is `true`, or `false` and the reason: `"a rule's id is 1-32 of a-z, 0-9 and _ . : -"`, `"the prompt is the game's
+---text key of the row (ui_eat_kettle), 1-64 characters without spaces"`, `"nothing to change: give a text, hide or take"`,
+---`"a hidden row shows nothing: hide goes alone, without text or take"`, `"the text is empty"`, `"the text is over 48
+---characters"`, `"an area needs x, y and z"`, `"the radius is 0.5 to 500 metres"` or `"too many rules (64 at most)"`.
+---@param id string the rule's id - 1 to 32 of `a-z 0-9 _ . : -` (capitals are lowered)
+---@param prompt string the game's text key of the prompt (`"ui_eat_kettle"`)
+---@param opts table `{text, hide, take, x, y, z, radius}` - see above
+---@return boolean ok `true`, or `false, reason` - the reason as a person reads it
+---@return string reason
+function SetObjectPrompt(id, prompt, opts) end
+
+---Takes one of the mode's prompt rules away - the game's own prompt is back.
+---@param id string the rule's id
+---@return true when there was such a rule, else `false`
+function RemoveObjectPrompt(id) end
+
+---Takes every prompt rule of the mode's away.
+---@return number how many rules were removed
+function ClearObjectPrompts() end
+
+---The mode's prompt rules.
+---
+---The oldest first (a changed rule counts as new). Each is a table `{id, prompt, text, hide, take, x, y, z, radius}`: `text` is
+---`nil` for the game's own words, `x`, `y`, `z` and `radius` are `nil` for a rule on every object. A fresh table each call.
+---@return table a list of rules, `{}` for none
+function GetObjectPrompts() end
+
 -- ======== Props =================================================================
 -- A **prop** is a static mesh of the game's object files placed in the world for everyone in range to see - a barrel, a fence, a
 -- table, a stone - like a pickup nobody can take. The mesh is a key of the mesh list: the id, the file's
@@ -5600,8 +5762,8 @@ function GetPlayerVoiceLevel(pid) end
 -- With the level's navigation mesh it walks around walls and opens the doors in its way (`[actors] open_doors`). Several
 -- actors on one player all swing at once by default; `[actors] max_attackers` makes them take turns - at most that many swing
 -- at one player within a `swing_interval`, the rest wait at arm's length, the longest waiting first. Actors fight each other
--- too (`SetActorHostileToActor`), and a mode can relabel and color the name over one (`SetActorNameplate`,
--- `SetActorColor`). `[actors]` in `server.toml` tunes how it fights. How hard it hits and what it wears are the mode's too:
+-- too (`SetActorHostileToActor`), and a mode can relabel and color the name over one and put a title above it (`SetActorNameplate`,
+-- `SetActorColor`, `SetActorNameplateTitle`). `[actors]` in `server.toml` tunes how it fights. How hard it hits and what it wears are the mode's too:
 -- its stats and skills (`SetActorStat`, `SetActorSkill`) and its items one by one (`SetActorInventory` - its armour counts,
 -- its weapon prices its blows). An actor also rides a horse, speaks the game's own lines and sits on the level's benches or works
 -- at its work spots (`MountActor`, `PlayActorBark`, `SetActorUse` - the next section).
@@ -6148,6 +6310,8 @@ function GetActorHandItem(id, hand) end
 ---flight. The server decides each arrow: where it flies (the opponent's movement led, off by a spread from `accuracy` - a miss
 ---is seen to miss) and what it costs - the bow's power and the arrow's attack against the armour on the part it struck, like a
 ---player's arrow, through `OnActorAttack` (an actor struck: `OnActorAttackActor`). It never shoots from the saddle.
+---Give the bow `worn = true`; its arrows may be worn or carried - carried ones are put on the archer all the same, so it
+---draws with them.
 ---@param id number the actor
 ---@param enabled? boolean `true` (the default) = it shoots; `false` = its melee weapon only (a fight under way changes to it)
 ---@param range? number metres it shoots within (`30`; 5-80)
@@ -6312,6 +6476,28 @@ function SetActorNameplate(id, text) end
 ---@param id number the actor
 ---@return string `""` when it shows its name
 function GetActorNameplate(id) end
+
+---A short title on its own line by an actor's label, with its own size, color and place.
+---
+---The title shows on every screen next to the label (`SetActorNameplate`, else the name) - "Garrison Commander" with "Vilem
+---Stepan" - either above the name (`"above"`, the default) or below it, between the name and the health bar (`"below"`). The
+---health bar and the prompt (`SetActorPrompt`) stay where they are either way, however long the title is.
+---
+---`size` is the title's text size as a share of the name's: `0.85` by default, from `0.3` to `1.5`. `color` is `0xRRGGBBAA`
+---like `SetActorColor`; `nil` or `0` gives the title the label's color. The title shows and hides with the label. `nil` or
+---`""` takes the title away. At most 48 characters, on one line. An actor that wears no label (created without a name, with
+---none set) shows no title either.
+---@param id number the actor
+---@param text string|nil the title; `nil` or `""` = none
+---@param size number|nil the title's text size as a share of the name's (0.3-1.5); `nil` = 0.85
+---@param color number|nil `0xRRGGBBAA`; `nil` or `0` = the label's color
+---@param position string|nil `"above"` the name (`nil`) or `"below"` it, between the name and the health bar
+---@return boolean `false` for anything but an actor, or a position other than `"above"` or `"below"`
+function SetActorNameplateTitle(id, text, size, color, position) end
+
+---An actor's title as set, with its size, color and place.
+---@param id number the actor
+function GetActorNameplateTitle(id) end
 
 ---The label one viewer alone reads over an actor.
 ---
@@ -7842,11 +8028,13 @@ function OnPlayerAuditViolation(pid, class, amount, allowed, origins) end
 
 ---**Called by the server** - The player's game made an item of its own - return `true` to adopt it, `false` to have it removed.
 ---
----In multiplayer the server gives every item the player carries, but the game still makes a few itself: a craft, a butchering, a
----loot, a die, a tool's work, the vial a drink leaves. The server has no record behind such an item; this callback is asked
----first, as the item arrives (in `observe` too - there the answer only changes what the log says). `kind` names the producer:
+---In multiplayer the server gives every item the player carries, but the game still makes a few itself: a craft, a loot, a die,
+---a tool's work, the vial a drink leaves. The server has no record behind such an item; this callback is asked first, as the
+---item arrives (in `observe` too - there the answer only changes what the log says). `kind` names the producer:
 ---
----- `craft` - alchemy, cooking, drying, preparing; `butcher` - an animal butchered; `loot` - an animal looted;
+---- `craft` - alchemy, cooking, drying, preparing; `loot` - an animal looted;
+---- `butcher` - the knife the game's butchering works with, and nothing else. You only hear of it when no butchering you allowed
+---  stands behind it (see "Never asked about" below);
 ---- `tool` - what a lockpick, a blade or a shovel makes; `dice` - the dice game's own dice; `eat` - what a meal leaves, an empty
 ---  vial or a core; `wear` - the broken twin a destroyed weapon is swapped for (the server pairs it with the item that broke, so
 ---  this reaches the mode only when it cannot);
@@ -7857,12 +8045,24 @@ function OnPlayerAuditViolation(pid, class, amount, allowed, origins) end
 ---- `smith` - what the player forged at an anvil: an item one of the game's smithing recipes makes, arriving while the player's
 ---  smithing session is open (from the anvil's start until half an hour after its start or its last product), with that recipe's
 ---  materials gone from the player's bag in the session;
----- `herb` is named for completeness: herbs picked in the world arrive as a take from the level (`OnPlayerTakeWorldItem`).
+---- `herb` - a herb or a mushroom the game's gathering made that no pick explains: more than a pick gives, or a pick the server
+---  never heard of. A pick's own yield never comes here (`OnPlayerPickHerb` decides the pick).
+---
+---**Never asked about.** Three things the game puts in the bag are not made items, so this callback does not hear of them and
+---they are never a violation:
+---
+---- a herb pick's yield;
+---- the bonus the game's Lucky Find perk sometimes adds to a pick: one entry of the perk's own list (a few herbs, a die, a dice
+---  badge, a little money, an arrow or a bolt, a trinket, a ring), within a limit of value a minute. The pick explains it, money
+---  and rings too; a pick you refuse takes it back with the yield;
+---- the cutlery knife the game's butchering works with. The game puts it in the butcher's bag when the animation starts and
+---  takes it back at the end, so a butchering you allowed (`OnPlayerButcher`) lends one knife. Taking that knife away would
+---  stop the animation halfway. The animal's meat is not made in the bag: the butcher takes it from the carcass.
 ---
 ---Return `true` to adopt the item (the records take it, as if the server had given it, whatever its class and number), `false`
 ---to have it removed, or nothing to leave it to the server's rule. The rule: an item the game made and no mode adopted is
 ---accepted when it is an ordinary item, no more than 100 at once, within a limit of value a minute - a bigger limit for a
----producer that really makes that kind of item (a craft makes food, herbs and alchemy, a butchering food and materials), a tight
+---producer that really makes that kind of item (a craft makes food, herbs and alchemy, a loot food and materials), a tight
 ---one for the rest, so a normal craft passes and a flood does not; it is refused for the guarded categories
 ---(`[audit] guarded_categories`: weapons, armour, ammunition, money) until a mode adopts them here; and everything made by a
 ---script of the game is refused while story quests are off. Items made by code outside the game are never asked about: they are
@@ -9454,7 +9654,9 @@ function GetPartyData(party, key) end
 ---@param amount number how many
 ---@param price number Groschen a piece
 ---@param id string a tagged row's id (`SetShopTaggedItem`), `""` for a plain row
-function OnPlayerBuy(pid, shop, class, amount, price, id) end
+---@param health number the condition the pieces are delivered at, 1..100 - the row's (`SetShopItem`; `100` = new)
+---@param quality number the quality they are delivered at, 1..4 (I..IV) - the row's; `0` = the class's own
+function OnPlayerBuy(pid, shop, class, amount, price, id, health, quality) end
 
 ---**Called by the server** - The player is about to sell to a shop - return `false` to refuse.
 ---
@@ -9469,24 +9671,27 @@ function OnPlayerBuy(pid, shop, class, amount, price, id) end
 ---@param amount number how many
 ---@param price number Groschen a piece, what the shop pays
 ---@param id string the sold item's id when it is one of the mode's tagged items (one with a price of its own - `SetPlayerItemPrice`), `""` otherwise
-function OnPlayerSell(pid, shop, class, amount, price, id) end
+---@param health number the pieces' condition, 0..100 - their average when they differ (the items the trade screen named first)
+---@param quality number the quality the pieces share, 1..4 (I..IV); `0` when they differ or the game has not told it yet
+function OnPlayerSell(pid, shop, class, amount, price, id, health, quality) end
 
 ---**Called by the server** - A deal is about to be done - every line at once; return `false` to call it off.
 ---
 ---Asked last: every line was checked - the stock, what the player carries, the purse that changes hands - and passed
 ---`OnPlayerSell` / `OnPlayerBuy`; the items and the money move right after this returns anything but `false`, so it is
 ---the place for what must happen only when a deal is really done. `deal.lines` lists the sales first, then the purchases,
----one line per item class: `{class=, amount=, price=, buy=, health=}` (`price` in Groschen a piece, `buy` `true` for a purchase;
----`health` the pieces' condition from 0 to 100 - 100 for a purchase, for a sale the average of the pieces it takes, the very
----items the trade screen named first; a line of one of the mode's tagged items - a tagged row bought, the player's own sold -
----also has its `id`).
+---one line per item class - a purchase one per row: `{class=, amount=, price=, buy=, health=, quality=}` (`price` in Groschen
+---a piece, `buy` `true` for a purchase; `health` the pieces' condition from 0 to 100 and `quality` their quality from 1 to 4 -
+---for a purchase the row's (`SetShopItem`: 100 and `0`, the class's own, unless the mode set others), for a sale the average
+---condition of the pieces it takes, the very items the trade screen named first, and the quality they share (`0` when they
+---differ); a line of one of the mode's tagged items - a tagged row bought, the player's own sold - also has its `id`).
 ---`deal.cost` is what the purchases cost and `deal.proceeds` what the sales bring; the player pays the difference, or is
 ---paid it. A deal on the shop panel is one line; the trade screen's "Close deal" sends the whole basket.
 ---
 ---Return value: `false` calls the deal off - nothing moves; anything else (or nothing) lets it through
 ---@param pid number the player
 ---@param shop number the shop
----@param deal table `{lines = {{class=, amount=, price=, buy=, health=, id=}, ...}, cost=, proceeds=}`
+---@param deal table `{lines = {{class=, amount=, price=, buy=, health=, quality=, id=}, ...}, cost=, proceeds=}`
 function OnPlayerShopDeal(pid, shop, deal) end
 
 ---**Called by the server** - A shop screen is about to open on a player - return `false` to keep it closed.
@@ -9538,18 +9743,33 @@ function IsValidShop(shop) end
 ---`item` is any key of the item catalogue (the name, the id, the English name, the GUID); an
 ---unknown key returns `false` and logs. `price` is Groschen a piece. `amount` is the stock: `nil` or `-1` = unlimited,
 ---`0` takes the row off the shelf. A row already there is changed in place; whoever has the screen open sees it move.
+---
+---`health` and `quality` sell a particular piece rather than the class: the condition (1..100) and the quality (1..4, I..IV)
+---the row's pieces are made at. The trade screen shows them with that quality's icon and that condition, the shop panel adds
+---them to the name ("Broad short sword (II, 60 %)"), and a purchase delivers the pieces so - `OnPlayerBuy` and
+---`OnPlayerShopDeal` say both. A row is its item, condition and quality together: rows of one item at other conditions or
+---qualities stand side by side (a player's stall of second-hand gear), each with its own price and stock. Left out, the row is
+---the item new and at its own quality, as before - a shop that never names them keeps one row an item. A quality past what the
+---item can be is its best.
 ---@param shop number the shop
 ---@param item string|number the item's name, id, English name or GUID
 ---@param price number Groschen a piece
 ---@param amount? number the stock; `nil` / `-1` = unlimited, `0` = off the shelf
+---@param health? number the condition the row's pieces are sold at, 1..100 (`100`, new)
+---@param quality? number the quality they are sold at, 1..4 (I..IV; left out = the item's own)
 ---@return boolean `false` for an unknown item or shop
-function SetShopItem(shop, item, price, amount) end
+function SetShopItem(shop, item, price, amount, health, quality) end
 
 ---Takes an item off the shelf.
+---
+---Without `health` and `quality`, every row of the item goes, whatever its condition and quality; with them, that row alone
+---(`SetShopItem`).
 ---@param shop number the shop
 ---@param item string|number the item's key
+---@param health? number the row's condition (`100` when only `quality` is given)
+---@param quality? number the row's quality (`0`, the item's own, when only `health` is given)
 ---@return boolean `false` when it was not on the shelf
-function RemoveShopItem(shop, item) end
+function RemoveShopItem(shop, item, health, quality) end
 
 ---Puts one of your tagged items on the shelf - a prize, a charter, a key - under its own name.
 ---
@@ -9558,9 +9778,11 @@ function RemoveShopItem(shop, item) end
 ---the row off). The shop shows the row under its `name`, and every piece sold is a tagged item with that id, name, text and weight,
 ---worth the price it cost (`SetPlayerItemPrice`: a shop that buys its kind takes it back at its sell factor). A player holds one
 ---item of an id, so one who has it already is refused ("you have one already"); give each row an id of its own for items every
----player should own apart. The row is its `id`: set again, it changes. `OnPlayerBuy` names the id.
+---player should own apart. The row is its `id`: set again, it changes. `OnPlayerBuy` names the id. `health` (1..100) and
+---`quality` (1..4) are the condition and quality every piece sold is made at, and what the trade screen shows (100 and the
+---item's own when left out).
 ---@param shop number the shop
----@param item table `{class=, id=, name=, text=, weight=, price=, amount=}`
+---@param item table `{class=, id=, name=, text=, weight=, price=, amount=, health=, quality=}`
 ---@return boolean `false` for no shop, an unknown class, an empty id or a negative price
 function SetShopTaggedItem(shop, item) end
 
@@ -9572,7 +9794,7 @@ function RemoveShopTaggedItem(shop, id) end
 
 ---The shelf - every row with its price and stock.
 ---@param shop number the shop
----@return table a list of `{class=, price=, amount=}`; `amount` `-1` = unlimited; a tagged row (`SetShopTaggedItem`) also has its `id`, `name`, `text` and `weight`; `{}` for no shop
+---@return table a list of `{class=, price=, amount=, health=, quality=}`; `amount` `-1` = unlimited; `health` 1..100 and `quality` 1..4, `0` = the item's own (`SetShopItem`); a tagged row (`SetShopTaggedItem`) also has its `id`, `name`, `text` and `weight`; `{}` for no shop
 function GetShopItems(shop) end
 
 ---The shop's purse in Groschen.
@@ -11083,7 +11305,7 @@ function SetInterfaceForAll(component, drawer) end
 ---| `compass` | `span` | 30 to 180: the degrees of the horizon the compass strip covers | `90` |
 ---| `dialog` | `side` | `left`, `right`: where a dialogue page's choices (`ShowPlayerDialogue`) stand - the right is where the game's own conversations put them | `left` |
 ---| `dialog` | `bars` | `off`, `dialog` (while a dialogue page is open), `on` (from now until set back): the game's own black cinema bars, with the subtitles moved into the lower one | `off` |
----| `hud` | `compass`, `stats`, `subtitles`, `hints`, `cursor`, `buffs`, `info_text`, `game_log`, `common_event`, `fancy_event`, `tutorial_message` | `1` shows the game's own HUD piece of that name, `0` hides it (`true`, `false`, `on`, `off`, `yes` and `no` are read as the same); `SetPlayerHudVisible` says what each piece is | `1` |
+---| `hud` | `compass`, `stats`, `subtitles`, `hints`, `cursor`, `buffs`, `info_text`, `game_log`, `common_event`, `fancy_event`, `tutorial_message`, `item_transfer` | `1` shows the game's own HUD piece of that name, `0` hides it (`true`, `false`, `on`, `off`, `yes` and `no` are read as the same); `SetPlayerHudVisible` says what each piece is | `1` |
 ---
 ---The other components have no options. The call is all or nothing: one bad key or value and nothing changes. The second
 ---value says what was wrong, in words - `"unknown component 'x'"`, `"unknown option 'x' for the chat"`, `"lines must be a whole
@@ -12685,6 +12907,8 @@ HUD_COMMON_EVENT = "common_event"
 HUD_FANCY_EVENT = "fancy_event"
 ---the tutorial box (`ShowTutorial`), the party's invitation and the death box
 HUD_TUTORIAL_MESSAGE = "tutorial_message"
+---the game's "You received" and "You parted with" popups, items and money alike
+HUD_ITEM_TRANSFER = "item_transfer"
 
 -- Teams
 ---no team - what `SetPlayerTeam` takes to remove a player from theirs and `GetPlayerTeam` answers without one

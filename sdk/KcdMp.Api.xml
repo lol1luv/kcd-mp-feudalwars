@@ -509,6 +509,12 @@
             option keys; a word is read loosely (case, "_", "-" and spaces do not count: "InfoText", "info_text" and "info-text" are one piece).
             </summary>
         </member>
+        <member name="F:KcdMp.Api.HudPieces.ItemTransfer">
+            <summary>
+            2026-11-20 (a forum ask): the game's own "received" / "lost" item popups - a herb picked, loot taken, an item or money the server gives or takes
+            (the game's <c>wh_ui_ShowItemTransfer</c>). Only the popup: the items move as before. A player's game older than this ignores the piece.
+            </summary>
+        </member>
         <member name="P:KcdMp.Api.HudPieces.All">
             <summary>Every piece, in this order.</summary>
         </member>
@@ -842,7 +848,9 @@
              never reachable through this.
             
              <para>Parameters only: <c>@name</c> in the SQL, the values in the dictionary (string, long / int, double, bool, null;
-             a DateTime travels as ISO 8601 text). There is no escape function on purpose: never concatenate a value into the
+             a DateTime or DateTimeOffset travels as ISO 8601 text in UTC that a date column and a text column alike take - on MySQL /
+             MariaDB without the trailing Z, which they refuse in a DATETIME; on PostgreSQL as an untyped value, so use one parameter per
+             column type). There is no escape function on purpose: never concatenate a value into the
              SQL text. A NULL column comes back as null. Integers come back as long, floating numbers as double, dates as ISO
              8601 strings.</para>
             
@@ -1464,6 +1472,19 @@
             price of its own), "" for plain items. The server calls this one; by default it asks the five-argument one.
             </summary>
         </member>
+        <member name="M:KcdMp.Api.IGameMode.OnPlayerBuy(KcdMp.Api.IPlayer,KcdMp.Api.IShop,System.String,System.Int32,System.Single,System.String,System.Int32,System.Int32)">
+            <summary>
+            v126: <see cref="M:KcdMp.Api.IGameMode.OnPlayerBuy(KcdMp.Api.IPlayer,KcdMp.Api.IShop,System.String,System.Int32,System.Single,System.String)"/> with the row's condition (1-100 percent) and quality (1 to 4;
+            0 = the class's own) - what the pieces are delivered at. The server calls this one; by default it asks the six-argument one.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.IGameMode.OnPlayerSell(KcdMp.Api.IPlayer,KcdMp.Api.IShop,System.String,System.Int32,System.Single,System.String,System.Int32,System.Int32)">
+            <summary>
+            v126: <see cref="M:KcdMp.Api.IGameMode.OnPlayerSell(KcdMp.Api.IPlayer,KcdMp.Api.IShop,System.String,System.Int32,System.Single,System.String)"/> with the sold pieces' condition (0-100 percent, the average
+            when they differ) and quality (1 to 4; 0 when they differ or the game has not told it). The server calls this one; by default it asks
+            the six-argument one.
+            </summary>
+        </member>
         <member name="M:KcdMp.Api.IGameMode.OnPlayerOpenShop(KcdMp.Api.IPlayer,KcdMp.Api.IShop,KcdMp.Api.IWorldEntity)">
             <summary>
             v49: the shop screen is about to open on the player - the use key on a vendor, or OpenShop. Return false to keep it
@@ -1608,6 +1629,12 @@
         <member name="M:KcdMp.Api.IGameMode.OnPlayerInteractDoor(KcdMp.Api.IPlayer,System.String)">
             <summary>v79: the player used the mode's own row on a door (IServerApi.SetDoorPrompt); the door itself did not move.</summary>
         </member>
+        <member name="M:KcdMp.Api.IGameMode.OnPlayerUseObject(KcdMp.Api.IPlayer,System.String,KcdMp.Api.ObjectUse)">
+            <summary>
+            v124: the player used a row of a game object that a rule of the mode's takes over (IServerApi.SetObjectPrompt with Take), within reach: the game did
+            nothing of its own. <paramref name="id"/> is the rule's id.
+            </summary>
+        </member>
         <member name="M:KcdMp.Api.IGameMode.OnPlayerInteract(KcdMp.Api.IPlayer,KcdMp.Api.IWorldEntity)">
             <summary>
             v79: the player pressed the use key on an interaction point (IServerApi.CreateInteraction) or on a prop with a prompt
@@ -1723,7 +1750,11 @@
             items within a value budget, and refused for guarded classes (weapons, armour, ammunition, money: [audit] guarded_categories)
             until a mode adopts them here. "smith" (2026-10-06) is what the player forged at an anvil - a class one of the game's
             smithing recipes makes, inside the smithing session the server saw start, with that recipe's materials gone from the bag in the
-            session: accepted, guarded or not, two pieces a minute at most, unless the mode returns false.
+            session: accepted, guarded or not, two pieces a minute at most, unless the mode returns false. Three things the game puts in
+            the bag are not made items and are never asked about here: a herb pick's yield and the bonus the Lucky Find perk adds to it
+            (the pick explains both - OnPlayerPickHerb decides the pick), and the knife the game's butchering works with (a butchering
+            OnPlayerButcher allowed lends it to the butcher's bag and takes it back). "butcher" names that knife when no such butchering
+            stands behind it and nothing else: the animal's meat is not made in the bag, the butcher takes it from the carcass.
             </summary>
         </member>
         <member name="M:KcdMp.Api.IGameMode.OnPlayerCheatDetected(KcdMp.Api.IPlayer,System.String,System.Boolean,System.String)">
@@ -2745,6 +2776,17 @@
         <member name="M:KcdMp.Api.IServerApi.GetActorNameplateFor(KcdMp.Api.IPlayer,KcdMp.Api.IWorldEntity)">
             <summary>2026-10-03: the label `viewer` alone reads over the actor (SetActorNameplateFor); "" = none of their own.</summary>
         </member>
+        <member name="M:KcdMp.Api.IServerApi.SetActorNameplateTitle(KcdMp.Api.IWorldEntity,System.String,System.Single,System.UInt32,System.String)">
+            <summary>
+            2026-11-19: a short title on its own line by an NPC actor's label on every screen ("Garrison Commander" over "Vilem
+            Stepan"); "" takes it away. At most 48 characters. `size` is the title's text size as a share of the name's (0.3-1.5; 0 or
+            less = 0.85); `color` 0xRRGGBBAA (0 = the name's color); `position` "above" the name (the default) or "below" it, between
+            the name and the health bar. The bar and the prompt keep their places either way, and the title shows and hides with the
+            label. Read back as <see cref="P:KcdMp.Api.IWorldEntity.NameplateTitle"/>, <see cref="P:KcdMp.Api.IWorldEntity.NameplateTitleSize"/>,
+            <see cref="P:KcdMp.Api.IWorldEntity.NameplateTitleColor"/> and <see cref="P:KcdMp.Api.IWorldEntity.NameplateTitleBelow"/>. False for anything but a
+            person actor, or a position other than "above" or "below".
+            </summary>
+        </member>
         <member name="M:KcdMp.Api.IServerApi.SetPlayerColor(KcdMp.Api.IPlayer,System.UInt32)">
             <summary>The color of the player's label and roster name, 0xRRGGBBAA; 0 = the default.</summary>
         </member>
@@ -3326,8 +3368,17 @@
             compared with what the server's records hold, the gives and takes still on their way counted, what they hold beyond the list is
             taken (an exact order their game carries out), what they miss is given (the server's record from this moment, the game makes it a
             moment later). Called again before the first call's orders are done, it orders nothing twice.
-            An item with Worn is put on (given first when they miss it); nothing is taken off - what they wear and keep stays on.
+            An item with Worn is put on (given first when they miss it; a tagged one they hold too, since 2026-11-20); nothing is taken off -
+            what they wear and keep stays on (SetPlayerItemWorn takes a piece off).
             v76: Health is the item's condition, 0..100 (100 = new): a missing item is made at it, one they hold is set to it.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.SetPlayerItemWorn(KcdMp.Api.IPlayer,System.String,System.Boolean)">
+            <summary>
+            2026-11-20: puts one of the player's items on (worn = true) or takes it off (false) without touching the bag - a tagged item by its id,
+            else any item of a class (by any catalogue key). Their game does it the way the inventory screen does and reports the change
+            (IPlayer.Equipment, OnPlayerInventoryChange). Nothing happens when one of the class is on already (worn) or none is (taken off). False when they
+            hold no item with that id and none of that class.
             </summary>
         </member>
         <member name="M:KcdMp.Api.IServerApi.EmptyPlayerInventory(KcdMp.Api.IPlayer,System.Boolean)">
@@ -3455,12 +3506,32 @@
         <member name="M:KcdMp.Api.IServerApi.SetShopItem(KcdMp.Api.IShop,System.String,System.Single,System.Int32)">
             <summary>A row of the stock: the item (any catalogue key), the price per piece in Groschen, the stock (-1 = unlimited; 0 = the row goes). False for an unknown item.</summary>
         </member>
+        <member name="M:KcdMp.Api.IServerApi.RemoveShopItem(KcdMp.Api.IShop,System.String)">
+            <summary>Takes every row of the item off the stock (each condition and quality, v126); false when the shop had none.</summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.SetShopItem(KcdMp.Api.IShop,System.String,System.Single,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            v126: a row of the stock at a condition and a quality - `health` 1-100 percent (100 = new), `quality` 1 to 4 (I to IV; 0 = the class's
+            own). The trade screen shows the row's pieces at both and a purchase delivers them so. A row is its item, condition and quality: rows of
+            one class at other conditions or qualities stand side by side (a player's stall), and the four-argument call is the row at 100 and 0.
+            `amount` 0 takes this row off.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.RemoveShopItem(KcdMp.Api.IShop,System.String,System.Int32,System.Int32)">
+            <summary>v126: takes the item's row at that condition and quality off the stock; false when the shop has no such row.</summary>
+        </member>
         <member name="M:KcdMp.Api.IServerApi.SetShopTaggedItem(KcdMp.Api.IShop,System.String,KcdMp.Api.ItemTag,System.Single,System.Int32)">
             <summary>
             v86: a tagged row of the stock - one of the mode's tagged items for sale (a tournament prize, a guild charter): the shop shows it under the
             tag's name, and every piece sold is a tagged item with that tag (its id, name, text and weight) whose own price is the row's. A player
             holds one item of an id, so a player who has one already is refused. `amount` = how many (1 by default, -1 = unlimited, 0 = the row
             goes). The row is the tag's id: set again, it changes. False for an unknown item, an empty id or a negative price.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.SetShopTaggedItem(KcdMp.Api.IShop,System.String,KcdMp.Api.ItemTag,System.Single,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            v126: <see cref="M:KcdMp.Api.IServerApi.SetShopTaggedItem(KcdMp.Api.IShop,System.String,KcdMp.Api.ItemTag,System.Single,System.Int32)"/> with the condition (1-100 percent) and the quality (1 to 4; 0 = the
+            class's own) every piece sold is made at, and the trade screen shows.
             </summary>
         </member>
         <member name="M:KcdMp.Api.IServerApi.RemoveShopTaggedItem(KcdMp.Api.IShop,System.String)">
@@ -4047,6 +4118,25 @@
         <member name="M:KcdMp.Api.IServerApi.GetPlayerActionHints(KcdMp.Api.IPlayer)">
             <summary>The mode's lines in the player's key hints, in the order they were added.</summary>
         </member>
+        <member name="M:KcdMp.Api.IServerApi.SetObjectPrompt(System.String,System.String,KcdMp.Api.ObjectPromptOptions,System.String@)">
+            <summary>
+            A rule of the mode's for a row the game's own level objects show - named by the game's text key of the row (<paramref name="prompt"/>:
+            "ui_eat_kettle" is a cooking pot's "Eat from kettle", "ui_put_into_kettle" its held "Pour the potion"; a leading "@" is allowed) - that changes its
+            text, hides it or takes it over (<see cref="T:KcdMp.Api.ObjectPromptOptions"/>), on every such object of the level or on those within an area. The rule of that
+            <paramref name="id"/> (1-32 of a-z 0-9 _ . : -) is replaced. Where several rules cover an object's row, the one with the smallest area wins, then the
+            newest. Every player sees the rules from their join on; a reload clears them. At most 64. False with the reason: a bad id or key, an empty or long
+            text, hide with a text or take, nothing to change, a bad area, too many rules.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.RemoveObjectPrompt(System.String)">
+            <summary>Takes the rule of that id away (the game's own row is back); false when there is none.</summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.ClearObjectPrompts">
+            <summary>Takes every rule of the mode's away; the number removed.</summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.GetObjectPrompts">
+            <summary>The mode's rules for the game objects' rows, the oldest first.</summary>
+        </member>
         <member name="M:KcdMp.Api.IServerApi.SetScoreboardColumns(System.Collections.Generic.IReadOnlyList{KcdMp.Api.ScoreboardColumnSpec},KcdMp.Api.IPlayer,System.String@)">
             <summary>
             The columns the scoreboard shows besides the game's own (at most 8; <see cref="T:KcdMp.Api.ScoreboardColumnSpec"/>) - for everyone (<paramref name="player"/>
@@ -4060,6 +4150,12 @@
             <summary>
             Shows or hides one of the game's own HUD pieces (<see cref="T:KcdMp.Api.HudPieces"/>) on the player's screen: the "hud" component's option of that name, as
             <see cref="M:KcdMp.Api.IServerApi.SetPlayerInterfaceOptions(KcdMp.Api.IPlayer,System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String},System.String@)"/> would set it. False with "no such piece" for another word.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.SetHudVisibleForAll(System.String,System.Boolean,System.String@)">
+            <summary>
+            2026-11-20: <see cref="M:KcdMp.Api.IServerApi.SetPlayerHudVisible(KcdMp.Api.IPlayer,System.String,System.Boolean,System.String@)"/> for every player and whoever joins later - the "hud" component's option of that name as
+            <see cref="M:KcdMp.Api.IServerApi.SetInterfaceOptionsForAll(System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String},System.String@)"/> would set it (a player's own setting of the piece gives way). False with "no such piece" for another word.
             </summary>
         </member>
         <member name="M:KcdMp.Api.IServerApi.SetPlayerLoadingHandover(KcdMp.Api.IPlayer,System.Object,System.String@)">
@@ -5361,6 +5457,16 @@
             <summary>
             v111: GivePlayerItem with the condition and the quality the items are made at - the quality 1 to 4 (I to IV, a forged masterwork the
             top), 0 = the class's own.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.IServerApi.TakePlayerItem(KcdMp.Api.IPlayer,System.String,System.Int32,System.Nullable{System.Int32},System.Int32)">
+            <summary>
+            2026-11-20: takes chosen pieces out of the player's bag - each the carried piece of the class nearest <paramref name="health"/>
+            (0..100, within a point of it; null = the worst first) and of <paramref name="quality"/> (1..4; 0 = any), a worn piece only when no
+            carried one matches. Every piece goes by its own id, so GetPlayerInventory shows at once the very pieces that left (GivePlayerItem with a
+            negative amount leaves the choice to the player's game, which takes the newest). The mode's tagged items are never taken. Returns the
+            pieces ordered, one entry per piece or stack (its amount, condition, quality, whether it was worn) - fewer, or none, when the bag holds
+            fewer such pieces: book exactly these.
             </summary>
         </member>
         <member name="M:KcdMp.Api.IServerApi.GetPlayerItemQuality(KcdMp.Api.IPlayer,System.String)">
@@ -6781,6 +6887,12 @@
         <member name="P:KcdMp.Api.ShopItem.Tag">
             <summary>v86: a tagged row (IServerApi.SetShopTaggedItem) - the tag every piece sold carries; null for a plain row of the class.</summary>
         </member>
+        <member name="P:KcdMp.Api.ShopItem.Health">
+            <summary>v126: the condition the row's pieces are sold at, 1-100 percent (100 = new, the default).</summary>
+        </member>
+        <member name="P:KcdMp.Api.ShopItem.Quality">
+            <summary>v126: the row's quality, 1 to 4 (I to IV); 0 = the class's own (the default).</summary>
+        </member>
         <member name="T:KcdMp.Api.ShopScreen">
             <summary>v49: the screen a shop opens on (<see cref="M:KcdMp.Api.IServerApi.SetShopScreen(KcdMp.Api.IShop,KcdMp.Api.ShopScreen)"/>).</summary>
         </member>
@@ -6801,8 +6913,14 @@
         </member>
         <member name="P:KcdMp.Api.ShopDealLine.Health">
             <summary>
-            The condition of the line's pieces, 0-100 percent: 100 for a purchase (made whole); for a sale, the average of the pieces it
-            takes - the very items the trade screen named first - weighted by how many of each.
+            The condition of the line's pieces, 0-100 percent: for a purchase, the row's (100 unless the mode set another, v126); for a sale, the
+            average of the pieces it takes - the very items the trade screen named first - weighted by how many of each.
+            </summary>
+        </member>
+        <member name="P:KcdMp.Api.ShopDealLine.Quality">
+            <summary>
+            v126: the quality of the line's pieces, 1 to 4 (I to IV): for a purchase, the row's (0 = the class's own); for a sale, the quality the
+            pieces it takes share - 0 when they differ or the game has not told it yet.
             </summary>
         </member>
         <member name="T:KcdMp.Api.ShopDeal">
@@ -6916,6 +7034,18 @@
         </member>
         <member name="P:KcdMp.Api.IWorldEntity.Nameplate">
             <summary>An NPC actor's label as the game mode set it (IServerApi.SetActorNameplate); "" = its <see cref="P:KcdMp.Api.IWorldEntity.Name"/>.</summary>
+        </member>
+        <member name="P:KcdMp.Api.IWorldEntity.NameplateTitle">
+            <summary>2026-11-19: the title over an NPC actor's label (IServerApi.SetActorNameplateTitle); "" = none.</summary>
+        </member>
+        <member name="P:KcdMp.Api.IWorldEntity.NameplateTitleSize">
+            <summary>2026-11-19: the title's text size as a share of the name's (IServerApi.SetActorNameplateTitle); 0.85 by default.</summary>
+        </member>
+        <member name="P:KcdMp.Api.IWorldEntity.NameplateTitleColor">
+            <summary>2026-11-19: the title's color, 0xRRGGBBAA (IServerApi.SetActorNameplateTitle); 0 = the name's.</summary>
+        </member>
+        <member name="P:KcdMp.Api.IWorldEntity.NameplateTitleBelow">
+            <summary>2026-11-19: the title sits below the name, between it and the health bar (IServerApi.SetActorNameplateTitle "below").</summary>
         </member>
         <member name="P:KcdMp.Api.IWorldEntity.Color">
             <summary>The color of an NPC actor's label, 0xRRGGBBAA (IServerApi.SetActorColor); 0 = the default.</summary>
@@ -7338,6 +7468,51 @@
         <member name="M:KcdMp.Api.MapIconType.#ctor(System.String,System.String,System.Int32,System.String,System.Boolean)">
             <summary>v107: one of the game's map icon types: its name, its GUID, its icon (the legend's number, -1 = none), its English legend
             name, and whether it is a shop or a service.</summary>
+        </member>
+        <member name="T:KcdMp.Api.ObjectPromptOptions">
+            <summary>
+            v124: what a rule does to a row of the game's own level objects (<see cref="M:KcdMp.Api.IServerApi.SetObjectPrompt(System.String,System.String,KcdMp.Api.ObjectPromptOptions,System.String@)"/>) - a cooking pot's "Eat from kettle", a wash
+            tub's "Wash", a bench's "Sit". Give a <see cref="P:KcdMp.Api.ObjectPromptOptions.Text"/>, <see cref="P:KcdMp.Api.ObjectPromptOptions.Hide"/> or <see cref="P:KcdMp.Api.ObjectPromptOptions.Take"/> (a text may go with take); hide goes alone.
+            </summary>
+        </member>
+        <member name="P:KcdMp.Api.ObjectPromptOptions.Text">
+            <summary>The row's text instead of the game's: as written (48 characters at most), or "@" and a key of the game's own texts. null = the game's.</summary>
+        </member>
+        <member name="P:KcdMp.Api.ObjectPromptOptions.Hide">
+            <summary>The row is not shown at all: the player cannot do it there.</summary>
+        </member>
+        <member name="P:KcdMp.Api.ObjectPromptOptions.Take">
+            <summary>
+            The mode takes the row over: the game's own action does not run (nobody eats, nothing is poured) and the use key reaches
+            <see cref="M:KcdMp.Api.IGameMode.OnPlayerUseObject(KcdMp.Api.IPlayer,System.String,KcdMp.Api.ObjectUse)"/>. The row is always usable then - the game's own reasons for greying it out (a full belly, an empty pot)
+            are the mode's to judge.
+            </summary>
+        </member>
+        <member name="P:KcdMp.Api.ObjectPromptOptions.Near">
+            <summary>Only the objects within <see cref="P:KcdMp.Api.ObjectPromptOptions.Radius"/> metres of this point; null = every object of the level that shows the row.</summary>
+        </member>
+        <member name="P:KcdMp.Api.ObjectPromptOptions.Radius">
+            <summary>With <see cref="P:KcdMp.Api.ObjectPromptOptions.Near"/>: the area's radius in metres (0.5 - 500; 0 = 3).</summary>
+        </member>
+        <member name="T:KcdMp.Api.ObjectPrompt">
+            <summary>v124: a rule of the mode's (<see cref="M:KcdMp.Api.IServerApi.SetObjectPrompt(System.String,System.String,KcdMp.Api.ObjectPromptOptions,System.String@)"/>): its id, the game's text key of the row it changes, what it does.</summary>
+        </member>
+        <member name="M:KcdMp.Api.ObjectPrompt.#ctor(System.String,System.String,KcdMp.Api.ObjectPromptOptions)">
+            <summary>v124: a rule of the mode's (<see cref="M:KcdMp.Api.IServerApi.SetObjectPrompt(System.String,System.String,KcdMp.Api.ObjectPromptOptions,System.String@)"/>): its id, the game's text key of the row it changes, what it does.</summary>
+        </member>
+        <member name="T:KcdMp.Api.ObjectUse">
+            <summary>
+            v124: a use of a row a rule took over (<see cref="M:KcdMp.Api.IGameMode.OnPlayerUseObject(KcdMp.Api.IPlayer,System.String,KcdMp.Api.ObjectUse)"/>): the game's text key of the row, whether it was the held row (a pot's
+            "Pour the potion") or the pressed one, the object's level name (big levels give one name to several objects - tell them apart by the place) and its
+            place.
+            </summary>
+        </member>
+        <member name="M:KcdMp.Api.ObjectUse.#ctor(System.String,System.Boolean,System.String,System.Numerics.Vector3)">
+            <summary>
+            v124: a use of a row a rule took over (<see cref="M:KcdMp.Api.IGameMode.OnPlayerUseObject(KcdMp.Api.IPlayer,System.String,KcdMp.Api.ObjectUse)"/>): the game's text key of the row, whether it was the held row (a pot's
+            "Pour the potion") or the pressed one, the object's level name (big levels give one name to several objects - tell them apart by the place) and its
+            place.
+            </summary>
         </member>
         <member name="T:KcdMp.Api.PerkEffects">
             <summary>
