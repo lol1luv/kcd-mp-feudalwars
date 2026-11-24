@@ -13,13 +13,15 @@ export TMPDIR="$PWD/tmp" TMP="$PWD/tmp" TEMP="$PWD/tmp"
 # rewrite server.toml from the Startup variable, so enforce it here.
 # LEVEL comes from the egg's Startup tab.
 LEVEL_WANT="${LEVEL:-kutnohorsko}"
+echo "LEVEL env = '${LEVEL:-<unset>}' -> want '$LEVEL_WANT'"
 if [ -f server.toml ]; then
+  echo "server.toml level before: $(grep -E '^[[:space:]]*level[[:space:]]*=' server.toml || echo '<none>')"
   if grep -qE '^[[:space:]]*level[[:space:]]*=' server.toml; then
     sed -i -E "s|^[[:space:]]*level[[:space:]]*=.*|level = \"$LEVEL_WANT\"|" server.toml
   else
     printf '\n[server]\nlevel = "%s"\n' "$LEVEL_WANT" >> server.toml
   fi
-  echo "Level enforced: $LEVEL_WANT"
+  echo "server.toml level after: $(grep -E '^[[:space:]]*level[[:space:]]*=' server.toml || echo '<none>')"
 else
   echo "WARNING: no server.toml, server will use its own defaults."
 fi
