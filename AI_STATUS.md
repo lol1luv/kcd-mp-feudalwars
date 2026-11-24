@@ -46,6 +46,9 @@
 - [ ] Reimport egg в админке (из-за смены дефолта LEVEL).
 - [ ] Поменять Startup `LEVEL=kutnohorsko` на сервере `16e44d50`, Restart, проверить лог `KcdMp.Server 0.51.1 (protocol 126)` + `feudalwars on kutnohorsko`.
 - [ ] Проверить в игре: маркеры работ на компасе, иконки на карте (M), `/help`, `/goto mine`, `/job mine` → `/job done`, `/build list` → `/build place tent`, `/editor` (админ).
+- [ ] ВАЖНО: карта меняется только через Startup `LEVEL=kutnohorsko` + Restart. Из Lua сменить карту нельзя. Если после рестарта всё ещё klaster — смотреть лог: `feudalwars on <level>`.
+- [ ] Если маркеров/иконок нет — смотреть лог: `feudalwars: map folder=...`, `marker refused`, `no map icon type`, `map icon refused`. Возможные причины: нет карты на сервере (readOnly), нет типа иконки на уровне (fallback на pin), игрок смотрит не туда.
+- [ ] `/editor` требует веб-слой в игре (server interfaces в опциях лаунчера). Без него — сообщение в чат. Это требование движка, не баг мода.
 - [ ] Следующий модуль по промту: лавки игроков (`CreateShop` + найм NPC-продавца). Ждёт команды «делай лавки».
 - [ ] Починить `hall.js`: кнопки promote/demote/kick шлют пустые payload (`prompt ? undefined : undefined`) — надо слать имя игрока.
 - [ ] Добавить `/build` в `HELP_MENU`? Уже есть. Проверить `/help` в игре после рестарта.
@@ -68,6 +71,7 @@
 - `sdk/KcdMp.d.lua`: API (~13000 строк).
 
 ## 8. Лог изменений
+- `e223763` (2026-11-24): UI events via OnClientEvent (emitServer!), key bindings E/F/F1-F4, action hints, menu frame, editor web check, marker diagnostics, Esc closes frames, SetPlayerWebFocus on open.
 - `1837202` (2026-11-24): visible job sites, /help, /goto, /build preview, /editor, kutnohorsko default.
 - `1a95abb` (2026-11-24): jobs module (mine/farm/forest, stock, skills, /job, db).
 - `bb0f70d` и ранее: 0.51.1 бинарники, ShowPlayerWebFrame фикс, start.sh автообновление.
