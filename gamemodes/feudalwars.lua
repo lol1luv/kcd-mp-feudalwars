@@ -89,7 +89,7 @@ local JOBS = {
 }
 
 -- forward declarations (assigned further down; used by the node core above)
-local lang_of, arch_open, bp_load_all, close_frame, isAdmin, MENU_TEXT
+local lang_of, arch_open, bp_load_all, close_frame, isAdmin, MENU_TEXT, say, say_text
 local db, fmt, earn, save_money, job_skill_of, job_skill_up
 
 -- ---------------------------------------------------------------- breakable objects
@@ -106,13 +106,24 @@ local function node_hash(kind, x, y)
   return fmt("%s_%d_%d", kind, math.floor(x), math.floor(y))
 end
 
-local function terrain_z(x, y, fallback)
-  local ok, h = pcall(GetTerrainHeight, x, y)
-  if ok and type(h) == "number" and h > -100 then return h end
-  ok, h = pcall(GetGroundZ, x, y, 200.0)
-  if ok and type(h) == "number" and h > -100 then return h end
-  return fallback or 0
+-- where the ground is, in order of trust: the navmesh's walkable floor (players
+  -- stand there), then the collision floor, then the terrain heightmap, then the
+  -- nearest navmesh point. Only if none answers do we keep the hint. This is why
+  -- sites used to float or sink: GetTerrainHeight is nil without a heightmap.
+local function ground_z(x, y, hint)
+  hint = hint or 0
+  local ok, z = pcall(GetNavmeshHeight, x, y, hint)
+  if ok and type(z) == "number" then return z end
+  ok, z = pcall(GetGroundZ, x, y, hint + 100.0)
+  if ok and type(z) == "number" then return z end
+  ok, z = pcall(GetTerrainHeight, x, y)
+  if ok and type(z) == "number" then return z end
+  ok, z = pcall(NearestNavmeshPoint, x, y, hint)
+  if ok and z and type(z) == "table" and type(z.z) == "number" then return z.z end
+  return hint
 end
+
+local terrain_z = ground_z   -- old name kept
 
 local function node_persist(n)
   if not db then return end
@@ -171,8 +182,9 @@ local function node_break(n, pid)
     local rdef = RES[n.res]
     if rdef then
       GivePlayerItem(pid, "fw_" .. n.res, n.yield or 1)
-      SendClientMessage(pid, COLOR_YELLOW, fmt("%s breaks apart - %d %s to your bag.",
-        n.label or "the stone", n.yield or 1, rdef.name[lang_of(pid)] or rdef.name.en))
+      local rname = rdef.name[lang_of(pid)] or rdef.name.en
+      say(pid, fmt("%s рассыпается — +%d × %s в сумку.", n.label or "камень", n.yield or 1, rname),
+        fmt("%s breaks apart - %d %s to your bag.", n.label or "the stone", n.yield or 1, rname), COLOR_YELLOW)
     end
     local def = JOBS[n.kind]
     if def then
@@ -181,7 +193,7 @@ local function node_break(n, pid)
       local total = skill + 1
       if total >= 10 and total % 10 == 0 then
         local nl = job_skill_up(pid, def.skill)
-        SendClientMessage(pid, COLOR_YELLOW, fmt("%s skill raised to %d.", def.skill, nl))
+        say(pid, fmt("навык %s вырос до %d.", def.skill, nl), fmt("%s skill raised to %d.", def.skill, nl), COLOR_YELLOW)
       else
         job_skill_up(pid, def.skill)
       end
@@ -255,15 +267,44 @@ local job_skills = {}    -- pid -> { mining = n, farming = n, woodcutting = n }
 local job_hit_cd = {}   -- pid -> earliest next hit time (anti-macro)
 local arch_interaction, architect_npc = nil, nil   -- the builder's use point and actor
 local icon_types = {}   -- map icon type names the level knows, filled in init
+local vein_mesh = {}    -- kind -> real mesh path discovered at boot
 
--- a site's compass marker and map icon
+-- discover the real game meshes for each vein kind, so a site looks like a real
+  -- boulder / trunk / crate rather than a coloured marker. FindMeshes searches the
+  -- server's mesh list by words in the path.
+local function discover_veins()
+  local wants = {
+    mine = { "boulder", "rock", "quarry_stone", "stone_pile" },
+    forest = { "trunk", "oak", "stump", "log_pile", "tree" },
+    farm = { "crate", "sack", "hay", "sheaf", "barrel" },
+  }
+  for kind, words in pairs(wants) do
+    for _, w in ipairs(words) do
+      local ok, list = pcall(FindMeshes, w, 40)
+      if ok and type(list) == "table" then
+        for _, m in ipairs(list) do
+          local p = tostring(m.path or "")
+          -- prefer a plain mesh, skip trees with foliage height or particles
+          if p:find("%.cgf$") and (kind ~= "forest" or p:find("trunk") or p:find("stump")) then
+            vein_mesh[kind] = p
+            break
+          end
+        end
+      end
+      if vein_mesh[kind] then break end
+    end
+    Log(fmt("feudalwars: vein mesh for %s = %s", kind, tostring(vein_mesh[kind] or JOBS[kind].vein_mesh)))
+  end
+end
+
+-- a site's map icon only. No compass marker: the game shows a big circle for a
+  -- quest marker, which is not what the sites should look like. The sites are real
+  -- game objects (boulders, trunks, crates) the player can strike.
 local function site_show(site)
   local def = JOBS[site.kind]
   if not def then return end
   if site.marker then pcall(DestroyMarker, site.marker) site.marker = nil end
   if site.mapicon then pcall(DeleteMapIcon, site.mapicon) site.mapicon = nil end
-  local mid = CreateMarker(site.x, site.y, site.z + 1.0, MARKER_QUEST, 0, site.label or def.label)
-  if mid then site.marker = mid ShowMarkerForAll(mid) end
   local opts
   if def.icon and icon_types[def.icon] then
     opts = { type = def.icon, name = site.label or def.label }
@@ -285,7 +326,7 @@ local function site_raise_nodes(site)
     node_define({
       key = node_hash(site.id .. "_" .. i, nx, ny),
       kind = site.kind, x = nx, y = ny, z = terrain_z(nx, ny, site.z),
-      mesh = def.vein_mesh, scale = def.vein_scale or 1.2,
+      mesh = vein_mesh[site.kind] or def.vein_mesh, scale = def.vein_scale or 1.2,
       hp = def.node_hp or 4, res = job_roll_drop(def), yield = 1,
       label = def.node_label or "the vein", prompt = "Strike (" .. (def.tool_names or "tool") .. ")",
     })
@@ -341,7 +382,7 @@ end
 local function job_work_start(pid, kind, site_id)
   local site = (site_id and job_sites[site_id]) or job_find_near(pid, kind)
   if not site then
-    SendClientMessage(pid, COLOR_RED, fmt("no %s nearby - walk to %s.", JOBS[kind].label, JOBS[kind].label))
+    say(pid, "здесь нет работы — иди к отмеченному месту (/goto).", "no work site here - walk to a marked site (/goto).", COLOR_RED)
     return
   end
   local def = JOBS[site.kind]
@@ -353,13 +394,33 @@ local function job_work_start(pid, kind, site_id)
     end
   end
   local skill = job_skill_of(pid, def.skill)
-  local what = site.kind == "mine" and "rocks" or (site.kind == "forest" and "trunks" or "sheaves")
+  local names = {
+    mine = { ru = "камней", en = "rocks" },
+    forest = { ru = "стволов", en = "trunks" },
+    farm = { ru = "снопов", en = "sheaves" },
+  }
+  local tools = {
+    mine = { ru = "кирку, молот или лопату", en = "a pickaxe, hammer or shovel" },
+    forest = { ru = "топор лесоруба", en = "a woodcutter's axe" },
+    farm = { ru = "лопату, мотыгу или серп", en = "a shovel, hoe or sickle" },
+  }
+  local skills = {
+    mine = { ru = "горное дело", en = "mining" },
+    forest = { ru = "лесорубка", en = "woodcutting" },
+    farm = { ru = "земледелие", en = "farming" },
+  }
+  local tt = tools[site.kind] or { ru = "инструмент", en = "a tool" }
+  local nn = names[site.kind] or { ru = "ресурсов", en = "nodes" }
+  local ss = skills[site.kind] or { ru = "навык", en = "skill" }
   if standing == 0 then
-    SendClientMessage(pid, COLOR_RED, fmt("%s is worked out - the %s grow back with time.", site.label or def.label, what))
+    say(pid, fmt("%s истощено — %s вырастут снова со временем.", site.label or def.label, nn.ru),
+      fmt("%s is worked out - the %s grow back with time.", site.label or def.label, nn.en), COLOR_RED)
     return
   end
-  SendClientMessage(pid, COLOR_YELLOW, fmt("%s: %d %s here. Hold %s and strike them. Your %s: %d.",
-    site.label or def.label, standing, what, def.tool_names, def.skill, skill))
+  say(pid, fmt("%s: %d %s. Держи в руках %s и бей их. Твой навык (%s): %d.",
+    site.label or def.label, standing, nn.ru, tt.ru, ss.ru, skill),
+    fmt("%s: %d %s here. Hold %s and strike them. Your %s: %d.",
+      site.label or def.label, standing, nn.en, tt.en, ss.en, skill), COLOR_YELLOW)
 end
 
 -- a swing struck the level: work veins and blueprint rocks live here; combat is never blocked
@@ -374,14 +435,16 @@ local function job_on_hit(pid, hit)
   local tool_ok = true
   if def and def.tools then tool_ok = job_has_tool(pid, def) end
   if not tool_ok then
-    SendClientMessage(pid, COLOR_RED, fmt("you need %s in your hands.", def.tool_names))
+    local tr = { mine = "кирку, молот или лопату", forest = "топор лесоруба", farm = "лопату, мотыгу или серп" }
+    say(pid, fmt("нужно взять в руки %s.", tr[n.kind] or "инструмент"),
+      fmt("you need %s in your hands.", def.tool_names), COLOR_RED)
     return
   end
   pcall(SpawnEffect, (def and def.hit_effect) or "collisions.rock_hit", hit.x, hit.y, hit.z, 1.0)
   pcall(PlaySound, (def and def.hit_sound) or "special_blacksmith_hammer_anvil", hit.x, hit.y, hit.z, 2)
   node_damage(n, pid, 1)
   if n.hp > 0 then
-    SendClientMessage(pid, COLOR_SERVER, fmt("crack... (%d/%d)", n.hp_max - n.hp, n.hp_max))
+    say(pid, fmt("треск... (%d/%d)", n.hp_max - n.hp, n.hp_max), fmt("crack... (%d/%d)", n.hp_max - n.hp, n.hp_max), COLOR_SERVER)
   end
 end
 
@@ -413,8 +476,10 @@ local function job_status(pid)
         end
       end
       local skill = job_skill_of(pid, def.skill)
-      lines[#lines + 1] = fmt("%s - %d m, %d node(s), hold %s, your %s %d",
-        site.label or def.label, math.floor(dist), standing, def.tool_names, def.skill, skill)
+      lines[#lines + 1] = say_text(pid,
+        fmt("%s — %d м, %d жил, навык %s %d", site.label or def.label, math.floor(dist), standing,
+          ({ mine = "горное дело", forest = "лесорубка", farm = "земледелие" })[site.kind] or def.skill, skill),
+        fmt("%s - %d m, %d node(s), %s %d", site.label or def.label, math.floor(dist), standing, def.skill, skill))
     end
   end
   for _, l in ipairs(lines) do SendClientMessage(pid, COLOR_SERVER, l) end
@@ -700,27 +765,27 @@ function OnGameModeInit()
   local sx, sy, sz, syaw = GetDefaultSpawn()
   AddSpawnPoint(sx, sy, sz, syaw, "town")
 
-  -- Work sites spread over Kuttenberg, each in a place that suits its trade:
-  -- a quarry by the hills, fields by the farmland, logging in the woods. Only
-  -- the coordinates are fixed; z comes from the terrain, so a site always sits on
-  -- the ground. Admins can re-place any site in the game with /jobsite.
+  -- Work sites: offsets from the spawn, snapped to the walkable ground, so they
+  -- never float or sink whatever the map or the exported data. Larger offsets
+  -- give the "spread over the map" feel without guessing wild coordinates.
   local SITE_PLAN = {
-    { id = "mine_quarry",   kind = "mine",   x = 2870.0, y = 2960.0, label = "Kuttenberg quarry" },
-    { id = "mine_hills",    kind = "mine",   x = 3130.0, y = 800.0,  label = "Hillside adit" },
-    { id = "farm_lowlands", kind = "farm",   x = 1520.0, y = 1990.0, label = "Lowland fields" },
-    { id = "farm_mill",     kind = "farm",   x = 3060.0, y = 770.0,  label = "Mill fields" },
-    { id = "forest_woods",  kind = "forest", x = 660.0,  y = 3260.0, label = "North woods" },
-    { id = "forest_grove",  kind = "forest", x = 1740.0, y = 2810.0, label = "Old grove" },
+    { id = "mine_quarry",   kind = "mine",   dx =  120, dy =  160, label = "the quarry" },
+    { id = "mine_hills",    kind = "mine",   dx = -240, dy =   90, label = "the hillside adit" },
+    { id = "farm_lowlands", kind = "farm",   dx =  -90, dy = -170, label = "the lowland fields" },
+    { id = "farm_mill",     kind = "farm",   dx =  210, dy =  -60, label = "the mill fields" },
+    { id = "forest_woods",  kind = "forest", dx =  -60, dy =  260, label = "the north woods" },
+    { id = "forest_grove",  kind = "forest", dx =  180, dy =  120, label = "the old grove" },
   }
 
   local mapinfo = GetMapInfo()
-  Log(fmt("feudalwars: map folder=%s readOnly=%s objects=%s (level %s)",
+  Log(fmt("feudalwars: map folder=%s readOnly=%s objects=%s (level %s, navmesh=%s)",
     tostring(mapinfo and mapinfo.folder), tostring(mapinfo and mapinfo.readOnly),
-    tostring(mapinfo and mapinfo.objects), GetLevel()))
+    tostring(mapinfo and mapinfo.objects), GetLevel(), tostring(HasNavmesh())))
   for _, t in ipairs(GetMapIconTypes() or {}) do icon_types[t.name or ""] = true end
+  discover_veins()
 
   local function site_place(id, kind, x, y, label)
-    local z = terrain_z(x, y, sz)
+    local z = ground_z(x, y, sz)
     local site = job_sites[id] or { id = id }
     site.kind, site.x, site.y, site.z, site.label = kind, x, y, z, label or JOBS[kind].label
     job_sites[id] = site
@@ -736,9 +801,11 @@ function OnGameModeInit()
   -- load admin-mapped sites from the database first; else use the plan
   local have_sites = next(job_sites) ~= nil
   if not have_sites then
-    for _, p in ipairs(SITE_PLAN) do site_place(p.id, p.kind, p.x, p.y, p.label) end
+    for _, p in ipairs(SITE_PLAN) do site_place(p.id, p.kind, sx + p.dx, sy + p.dy, p.label) end
   else
     for _, site in pairs(job_sites) do
+      -- re-snap every loaded site to the ground (old rows may carry a bad z)
+      site.z = ground_z(site.x, site.y, site.z)
       site_show(site)
       site_raise_nodes(site)
     end
@@ -817,7 +884,8 @@ function OnGameModeInit()
 
   -- hotkeys: E = ask the site what to do, F2 = main menu (F1 is the photo mode).
   -- Work itself is by weapon swings on the vein (OnPlayerHitScenery) - nothing is locked.
-  RegisterKeyBinding("fw.work", "Feudal Wars: ask the work site", "e")
+  -- hotkeys: F2 = main menu only. Work is by striking the vein (OnPlayerHitScenery);
+  -- the game's own E (use) must stay free for pickups, doors and containers.
   RegisterKeyBinding("fw.menu", "Feudal Wars: main menu", "f2")
 
   -- upkeep and war expiry, once a minute
@@ -923,7 +991,6 @@ function OnPlayerSpawn(pid)
     SendClientMessage(pid, COLOR_SERVER, fmt("You serve the house of %s. Treasury: %d, prestige: %d.", name, h.treasury, h.prestige))
   end
   AddPlayerActionHint(pid, "fw-menu", "f2", "Main menu", { binding = "fw.menu" })
-  AddPlayerActionHint(pid, "fw-work", "e", "Ask about work", { binding = "fw.work" })
 end
 
 function OnPlayerDeath(pid, attacker)
@@ -1132,6 +1199,17 @@ end, { help = "the house's standing", params = "[info|raise]" })
 
 local LANGS = { en = true, ru = true }
 local player_lang = {}    -- pid -> "en" | "ru"
+
+-- localized chat: say(pid, "ru text", "en text", color)
+say = function(pid, ru, en, color)
+  local text = (lang_of(pid) == "ru") and ru or en
+  SendClientMessage(pid, color or COLOR_SERVER, text)
+end
+
+-- pick a string without sending it (for building lines)
+say_text = function(pid, ru, en)
+  return (lang_of(pid) == "ru") and ru or en
+end
 
 local STR = {
   en = {
@@ -1664,17 +1742,7 @@ end, { help = "open the map editor (admins)", admin = true })
 
 function OnPlayerKeyBinding(pid, name, pressed)
   if not pressed then return end
-  if name == "fw.work" then
-    local px, py, pz = GetPlayerPos(pid)
-    local best, bestd, bestkind = nil, 6.0, nil
-    for _, site in pairs(job_sites) do
-      local dx, dy, dz = site.x - px, site.y - py, site.z - pz
-      local d = math.sqrt(dx * dx + dy * dy + dz * dz)
-      if d < bestd then best, bestd, bestkind = site, d, site.kind end
-    end
-    if bestkind then job_work_start(pid, bestkind)
-    else SendClientMessage(pid, COLOR_RED, "no work site here - walk to a marked site (/goto mine|farm|forest).") end
-  elseif name == "fw.menu" then
+  if name == "fw.menu" then
     open_menu(pid)
   end
 end
@@ -1711,19 +1779,12 @@ function OnPlayerInteract(pid, id)
   if nkey then
     local n = nodes[nkey]
     if n and n.hp > 0 then
-      SendClientMessage(pid, COLOR_SERVER, fmt("%s - %d/%d. Strike it with the right tool.", n.label or "the stone", n.hp, n.hp_max))
+      say(pid, fmt("%s — %d/%d. Бей нужным инструментом.", n.label or "камень", n.hp, n.hp_max),
+        fmt("%s - %d/%d. Strike it with the right tool.", n.label or "the stone", n.hp, n.hp_max), COLOR_SERVER)
     end
     return
   end
-  -- E near a work site: tell what to do
-  local px, py, pz = GetPlayerPos(pid)
-  local best, bestd = nil, 8.0
-  for _, site in pairs(job_sites) do
-    local dx, dy = site.x - px, site.y - py
-    local d = math.sqrt(dx * dx + dy * dy)
-    if d < bestd then best, bestd = site, d end
-  end
-  if best then job_work_start(pid, best.kind, best.id) end
+  -- anything else: leave the game's own E alone (pickups, doors, containers)
 end
 
 function OnPlayerDisconnect(pid, reason)
