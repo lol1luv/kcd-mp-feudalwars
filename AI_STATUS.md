@@ -61,15 +61,36 @@
 - Иконки карты: `type` — имя типа из `GetMapIconTypes()`; если типа нет на уровне — fallback `icon=0`.
 
 ## 7. Ключевые файлы
-- `gamemodes/feudalwars.lua` (~1000 строк): дома, войны, экономика, работы, билд, команды, веб-события.
-- `gamemodes/feudalwars/ui/ui.toml`: фреймы `me/hall/admin/notice`.
-- `gamemodes/feudalwars/ui/*/`: `me.js`, `hall.js`, `admin.js`, `notice.js`.
+- `gamemodes/feudalwars.lua` (входной, ~180 строк): только `require` модулей + `OnGameModeInit` + все коллбэки.
+- `gamemodes/feudalwars/core.lua`: пространство `FW`, конфиг, локализация, БД, деньги, фреймы, пробы мира.
+- `gamemodes/feudalwars/world.lua`: промыслы (зоны), люди королевства, высота, перемещение.
+- `gamemodes/feudalwars/economy.lua`: труд за удар, травы, охота, станции игры, рынок.
+- `gamemodes/feudalwars/factions.lua`: дома, войны, казна, слава, содержание.
+- `gamemodes/feudalwars/social.lua`: аккаунты, страница персонажа, /pay, жизненный цикл.
+- `gamemodes/feudalwars/build.lua`: зодчий, чертежи.
+- `gamemodes/feudalwars/npc.lua`: конструктор NPC + диалоги.
+- `gamemodes/feudalwars/justice.lua`: консоль короны, редактор.
+- `gamemodes/feudalwars/ui.lua`: меню, диспетчер страниц, все команды.
+- `gamemodes/feudalwars/ui/ui.toml`: фреймы `me/hall/admin/notice/menu/auction/build/craft/npc`.
 - `pterodactyl-egg-kcdmp-feudalwars.json`: egg (STARTUP, variables, config.files, install).
 - `pterodactyl-start.sh`: автообновление + запуск.
-- `server.toml.example`: контракт `[gamemode.database]`, `[server] level`.
+- `server.toml.example`: контракт `[gamemode.database]`, `[server] level`, `[world] map`.
 - `sdk/KcdMp.d.lua`: API (~13000 строк).
 
+## 9. Архитектура v4 (модульный рефакторинг, 2026-11-24)
+- **`require` подтверждён практикой** (локальный boot-тест на .NET 10): резолвится относительно папки скрипта. Вход `gamemodes/feudalwars.lua` → `require("feudalwars.core")` и т.д. `dofile`/`loadfile` — от cwd, НЕ годятся. Модули видят глобалы друг друга, могут регистрировать коллбэки.
+- **Корень жалоб найден**: на сервере НЕТ `data/combat/items.json` → каталог предметов пуст → `DefineItem`/`FindItems`/`GetItemInfo`/`GivePlayerItem("pickaxe")` не работают. Старый мод зависел от `fw_*` предметов и мешей → «кирки не появляются», «работу нельзя проверить». Проверено пробами: `items=false` в логе.
+- **Новая модель работы**: удар по реальному объекту уровня (`OnPlayerHitScenery` даёт `hit.x/y/z` — высота всегда верная, клиент её знает). Промысел определяется по `hit.surface`/`hit.mesh` (rock→quarry, tree→woods, crop→fields). Работает в ЛЮБОМ месте карты, не только у спавна. Оплата за удар, навык растёт, заработок копится и сообщается раз в 12с.
+- **Нативные механики вместо костылей**: травы (`OnPlayerPickHerb`), охота (`CreateAnimal`+`SetActorButcher`+`OnActorDeath`), станции игры (`SetCraftCheck`+`OnPlayerCraft` — алхимия/наковальня/точило), магазины (`CreateShop`+`SetShopItem`+`OpenShop`), диалоги (`ShowPlayerDialogue`+`OnDialogueResponse`), карманничество (`SetPickpocketing`).
+- **Высота**: `FW.ground()` пробует collision→navmesh→heightmap→hint. Без данных уровня объекты ставятся на z игрока (там, где он стоит — верно). `CreateMapObject`/`CreateProp`/`CreateActor`/`CreateAnimal`/`CreateHerb` принимают z<0 = «на землю» (клиент резолвит).
+- **Промыслы по умолчанию**: кольцо из 5 зон вокруг спавна (quarry/woods/fields/hunt/workshop). Админ переносит их в реальные места командой `/zone here <trade> [label]`. Зона = `CreateArea` (цилиндр) + `CreateMapIcon` + NPC-бригадир.
+- **Команды**: игрок — `/menu /me /job /goto /market /house /hall /war /prestige /money /pay /lang /commands`; админ — `/admin /editor /build /arch /npc /zone /reload-zones /kick /ban /give /tp /tphere`.
+- **Бинды**: F2 = меню, H = где работа. (F1 занят фоторежимом, E конфликтует с игрой.)
+- **БД**: `fw_players/fw_houses/fw_members/fw_sites/fw_people/fw_blueprints/fw_lots/fw_skills`. Без БД всё работает в памяти (деградация чистая).
+- **Boot-тест**: `KcdMp.Server.exe --gamemode gamemodes/feudalwars.lua` на .NET 10 (runtime в `%TEMP%\kilo\dotnet\runtime`). Лог: `server.log`. 16 коллбэков, 0 ошибок.
+
 ## 8. Лог изменений
+- `v4` (2026-11-24): ПОЛНЫЙ РЕФАКТОРИНГ НА МОДУЛИ + ПЕРЕПИСЬ НА НАТИВНЫХ МЕХАНИКАХ. Монолит 2473 строки → входной файл + 9 модулей через `require` (подтверждён boot-тестом). Работа переведена на удары по реальным объектам уровня (высота от клиента, работает везде). Найдена и обойдена корневая проблема: пустой каталог предметов (нет `data/combat/items.json`) — мод больше не зависит от `fw_*` предметов. Добавлены: травы, охота, станции игры, магазины, диалоги, карманничество, зоны промыслов с иконками/бригадирами, `/zone`, `/goto`, `/commands`. См. раздел 9.
 - `cc8d384` (2026-11-24): ПОЛНАЯ ПЕРЕРАБОТКА. (1) Ядро разрушаемых узлов: единый реестр `nodes`, HP, дроп, респаун 300с, персист в `fw_nodes` (mesh/label/is_map/mapid). (2) Работы разнесены по Kuttenberg: 2 шахты (каменоломня 2870/2960, штрек 3130/800), 2 поля (1520/1990, 3060/770), 2 леса (660/3260, 1740/2810); z из `GetTerrainHeight`. (3) Зодчий: NPC «Master Builder Havel» у спавна + `/arch new|save|stamp|list|cancel`; черновик из реальных map-объектов, камень бьётся и даёт руду, сохранение в `fw_blueprints`, тиражирование куда угодно с рабочими узлами. (4) UI: двухпанельное меню (rail: Обзор/Мир/Работа/Дом/Торг/Стройка/Настройки) + карточки, полный редизайн CSS, новый build-фрейм. (5) Исправлены баги порядка объявлений: `isAdmin`, `close_frame`, `lang_of`, `arch_open`, `bp_load_all`, `db`, `fmt`, `earn`, `save_money`, `job_skill_*` — все форвард-декларированы (иначе nil при вызове).
 - `2aeedc7` (2026-11-24): ресурсы уголь/железо/серебро/золото/камень/дерево/зерно (DefineItem fw_*, взвешенный дроп, в сумку), аукцион с UI (лоты в БД, продажа/покупка/снятие без чата), стройка только админам через визуальное меню (без грошей), все кнопки меню делают действие через UI (menu_do), каталог стройки RU/EN.
 - `8dc95d0` (2026-11-24): immersive работ: удар по жиле оружием в руках (OnPlayerHitScenery), проверка инструмента (кирка/молот/топор/серп), эффекты+звук при ударе, осколки-пикапы, жила-валун с истощением и респауном, `/job kit` выдача инструмента, НИЧЕГО не блокируется (E только подсказка, F убран, таймеров смен нет).
