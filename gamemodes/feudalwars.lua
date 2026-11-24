@@ -46,7 +46,7 @@ local function mylog(text)
 end
 
 local function notice(pid, text)
-  SendPlayerWebFrame(pid, "notice")
+  ShowPlayerWebFrame(pid, "notice")
   SendPlayerWebMessage(pid, "notice", { text = text })
 end
 
@@ -117,7 +117,7 @@ end
 local function open_me(pid)
   local name = playerHouse[pid]
   local h = name and houses[name]
-  SendPlayerWebFrame(pid, "me")
+  ShowPlayerWebFrame(pid, "me")
   SendPlayerWebMessage(pid, "me", {
     name = GetPlayerName(pid),
     money = GetPlayerMoney(pid),
@@ -151,7 +151,7 @@ local function open_hall(pid)
     wars[#wars + 1] = { enemy = h.war, score = h.score, since = os.date("%H:%M", math.floor(h.war_started / 1000)) }
   end
 
-  SendPlayerWebFrame(pid, "hall")
+  ShowPlayerWebFrame(pid, "hall")
   SendPlayerWebMessage(pid, "hall", {
     name = GetPlayerName(pid),
     house = name,
@@ -186,7 +186,7 @@ local function open_admin(pid)
       ping = GetPlayerPing(p),
     }
   end
-  SendPlayerWebFrame(pid, "admin")
+  ShowPlayerWebFrame(pid, "admin")
   SendPlayerWebMessage(pid, "admin", { players = players, log = adminLog })
 end
 
