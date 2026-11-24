@@ -71,6 +71,7 @@
 - `sdk/KcdMp.d.lua`: API (~13000 строк).
 
 ## 8. Лог изменений
+- `e35c2bd` (2026-11-24): install-скрипт: дефолт `level` klaster→kutnohorsko; start.sh пишет диагностику LEVEL env + level до/после. Юзер: браузер показывает Sedletz Monastery после реимпорта + LEVEL=kutnohorsko + рестарта.
 - `e5dc913` (2026-11-24): LEVEL enforce перенесён ДО update-check (иначе новый start.sh применялся только со 2-го рестарта). Юзер видит Sedletz Monastery (klaster) в браузере несмотря на LEVEL=kutnohorsko в Startup.
 - `b94c63c` (2026-11-24): focus=open у всех фреймов (клавиатура сразу, без клика), авто-курсор при открытии, закрытие через DestroyPlayerWebFrame + снятие фокуса, кнопка Free the mouse в меню.
 - `8a4bddc` (2026-11-24): start.sh принудительно прописывает `level = "$LEVEL"` в server.toml (Wings иногда не переписывает его из Startup-переменной).
