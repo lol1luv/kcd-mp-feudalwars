@@ -70,3 +70,11 @@ preload = true
 z = 318
 focus = "open"
 events_out = ["npc.*"]
+
+# The workshop: the production chain (ore->ingot->goods) at a station.
+[frames.craft]
+page = "craft/index.html"
+preload = true
+z = 316
+focus = "open"
+events_out = ["craft.*"]

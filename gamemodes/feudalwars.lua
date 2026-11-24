@@ -40,13 +40,51 @@ local ECONOMY = {
 -- Resources: the vein gives real items (weight + price from the base game item),
 -- with rare drops. Coal/iron are common, silver/gold are rare. Sell them at the auction.
 local RES = {
-  coal  = { base = "charcoal", name = { en = "Coal", ru = "РЈРіРѕР»СЊ" }, price = 4 },
-  iron  = { base = "iron", name = { en = "Iron ore", ru = "Р–РµР»РµР·РЅР°СЏ СЂСѓРґР°" }, price = 8 },
-  silver = { base = "silver", name = { en = "Silver ore", ru = "РЎРµСЂРµР±СЂСЏРЅР°СЏ СЂСѓРґР°" }, price = 25 },
-  gold  = { base = "gold", name = { en = "Gold ore", ru = "Р—РѕР»РѕС‚Р°СЏ СЂСѓРґР°" }, price = 60 },
-  stone = { base = "stone", name = { en = "Stone", ru = "РљР°РјРµРЅСЊ" }, price = 2 },
-  wood  = { base = "wood", name = { en = "Timber", ru = "Р‘СЂРµРІРЅРѕ" }, price = 3 },
-  grain = { base = "grain", name = { en = "Grain", ru = "Р—РµСЂРЅРѕ" }, price = 2 },
+  coal  = { base = "charcoal", name = { en = "Coal", ru = "Уголь" }, price = 4 },
+  iron  = { base = "iron", name = { en = "Iron ore", ru = "Железная руда" }, price = 8 },
+  silver = { base = "silver", name = { en = "Silver ore", ru = "Серебряная руда" }, price = 25 },
+  gold  = { base = "gold", name = { en = "Gold ore", ru = "Золотая руда" }, price = 60 },
+  stone = { base = "stone", name = { en = "Stone", ru = "Камень" }, price = 2 },
+  wood  = { base = "wood", name = { en = "Timber", ru = "Бревно" }, price = 3 },
+  grain = { base = "grain", name = { en = "Grain", ru = "Зерно" }, price = 2 },
+  -- crafted: the second step of the chain (ore -> ingot -> goods)
+  iron_ingot = { base = "iron", name = { en = "Iron ingot", ru = "Железный слиток" }, price = 22 },
+  silver_ingot = { base = "silver", name = { en = "Silver ingot", ru = "Серебряный слиток" }, price = 65 },
+  gold_ingot = { base = "gold", name = { en = "Gold ingot", ru = "Золотой слиток" }, price = 150 },
+  plank = { base = "wood", name = { en = "Plank", ru = "Доска" }, price = 9 },
+  flour = { base = "grain", name = { en = "Flour", ru = "Мука" }, price = 7 },
+  bread = { base = "bread", name = { en = "Bread", ru = "Хлеб" }, price = 14 },
+  -- smith's work: the third step
+  knife = { base = "knife", name = { en = "Hunting knife", ru = "Охотничий нож" }, price = 60 },
+  hammer = { base = "blacksmiths_hammer", name = { en = "Smith's hammer", ru = "Молот кузнеца" }, price = 90 },
+}
+
+-- Recipes: the production chain. Each turns inputs into an output at a workshop.
+-- Stations are the craft points a player stands at to work.
+local RECIPES = {
+  { id = "smelt_iron",   station = "forge", skill = "smithing",   out = "iron_ingot",   amount = 1, xp = 6,
+    in_items = { { item = "fw_iron", n = 2 }, { item = "fw_coal", n = 1 } } },
+  { id = "smelt_silver", station = "forge", skill = "smithing",   out = "silver_ingot", amount = 1, xp = 10,
+    in_items = { { item = "fw_silver", n = 2 }, { item = "fw_coal", n = 1 } } },
+  { id = "smelt_gold",   station = "forge", skill = "smithing",   out = "gold_ingot",   amount = 1, xp = 16,
+    in_items = { { item = "fw_gold", n = 2 }, { item = "fw_coal", n = 1 } } },
+  { id = "saw_planks",   station = "sawbench", skill = "carpentry", out = "plank", amount = 2, xp = 4,
+    in_items = { { item = "fw_wood", n = 1 } } },
+  { id = "mill_flour",   station = "mill", skill = "farming",     out = "flour", amount = 1, xp = 3,
+    in_items = { { item = "fw_grain", n = 2 } } },
+  { id = "bake_bread",   station = "oven", skill = "cooking",     out = "bread", amount = 2, xp = 4,
+    in_items = { { item = "fw_flour", n = 1 }, { item = "fw_wood", n = 1 } } },
+  { id = "forge_knife",  station = "forge", skill = "smithing",   out = "knife", amount = 1, xp = 18,
+    in_items = { { item = "fw_iron_ingot", n = 1 }, { item = "fw_wood", n = 1 } } },
+  { id = "forge_hammer", station = "forge", skill = "smithing",   out = "hammer", amount = 1, xp = 24,
+    in_items = { { item = "fw_iron_ingot", n = 2 }, { item = "fw_plank", n = 1 } } },
+}
+
+local STATIONS = {
+  forge    = { label = { en = "the forge", ru = "кузня" } },
+  sawbench = { label = { en = "the saw bench", ru = "пилорама" } },
+  mill     = { label = { en = "the mill", ru = "мельница" } },
+  oven     = { label = { en = "the oven", ru = "печь" } },
 }
 
 local JOBS = {
@@ -137,37 +175,39 @@ local function node_persist(n)
     function() end)
 end
 
--- a node's visual: a prop (works) or a map object (built blueprint pieces)
+-- a node's visual: always a map object. CreateMapObject with z < 0 puts the mesh
+  -- on the ground itself (the engine snaps it), which is why nodes no longer float
+  -- or sink. A node's object is the real game mesh the player can see and strike.
 local function node_show(n)
   if n.entity then return end
-  if n.is_map then
-    -- a blueprint piece: a real map object, recreated if it was broken
-    local id = CreateMapObject(n.mesh, n.x, n.y, n.z, { yaw = n.yaw or 0, scale = n.scale, persist = true, solid = true })
-    if id then
-      n.mapid = id
-      n.entity = id
-      node_by_entity[id] = n.key
-      node_persist(n)
-    end
+  if not n.mesh then return end
+  -- prefer a map object: z < 0 makes the engine put the mesh on the ground
+  local id, err = CreateMapObject(n.mesh, n.x, n.y, -1, {
+    yaw = n.yaw or math.random(0, 359), scale = n.scale, persist = true, solid = true,
+  })
+  if id then
+    n.mapid = id
+    n.entity = id
+    n.is_map = true
+    node_by_entity[id] = n.key
+    node_persist(n)
     return
   end
-  if n.mesh then
-    local id = CreateProp(n.mesh, n.x, n.y, n.z, n.yaw or 0, n.scale or 1, false, nil)
-    if id then
-      n.entity = id
-      node_by_entity[id] = n.key
-      pcall(SetEntityPrompt, id, n.prompt or "Strike")
-    end
+  -- no map (read-only or none): fall back to a static prop exactly on the ground
+  Log(fmt("feudalwars: node %s map object refused (%s), using prop", n.key, tostring(err)))
+  local pz = ground_z(n.x, n.y, n.z)
+  local pid_prop = CreateProp(n.mesh, n.x, n.y, pz, n.yaw or 0, n.scale or 1, false, nil)
+  if pid_prop then
+    n.entity = pid_prop
+    node_by_entity[pid_prop] = n.key
+    pcall(SetEntityPrompt, pid_prop, n.prompt or "Strike")
+    node_persist(n)
   end
 end
 
 local function node_hide(n)
   if not n.entity then return end
-  if n.is_map then
-    pcall(DeleteMapObject, n.entity)
-  else
-    pcall(DestroyEntity, n.entity)
-  end
+  if n.is_map then pcall(DeleteMapObject, n.entity) else pcall(DestroyEntity, n.entity) end
   node_by_entity[n.entity] = nil
   n.entity = nil
 end
@@ -183,7 +223,7 @@ local function node_break(n, pid)
     if rdef then
       GivePlayerItem(pid, "fw_" .. n.res, n.yield or 1)
       local rname = rdef.name[lang_of(pid)] or rdef.name.en
-      say(pid, fmt("%s СЂР°СЃСЃС‹РїР°РµС‚СЃСЏ вЂ” +%d Г— %s РІ СЃСѓРјРєСѓ.", n.label or "РєР°РјРµРЅСЊ", n.yield or 1, rname),
+      say(pid, fmt("%s рассыпается — +%d × %s в сумку.", n.label or "камень", n.yield or 1, rname),
         fmt("%s breaks apart - %d %s to your bag.", n.label or "the stone", n.yield or 1, rname), COLOR_YELLOW)
     end
     local def = JOBS[n.kind]
@@ -193,7 +233,7 @@ local function node_break(n, pid)
       local total = skill + 1
       if total >= 10 and total % 10 == 0 then
         local nl = job_skill_up(pid, def.skill)
-        say(pid, fmt("РЅР°РІС‹Рє %s РІС‹СЂРѕСЃ РґРѕ %d.", def.skill, nl), fmt("%s skill raised to %d.", def.skill, nl), COLOR_YELLOW)
+        say(pid, fmt("навык %s вырос до %d.", def.skill, nl), fmt("%s skill raised to %d.", def.skill, nl), COLOR_YELLOW)
       else
         job_skill_up(pid, def.skill)
       end
@@ -263,6 +303,83 @@ local function node_define_noshow(spec)
 end
 
 local job_sites = {}    -- id -> { id, kind, x, y, z, stock, marker, mapicon }
+
+-- ---------------------------------------------------------------- crafting (the production chain)
+local craft_stations = {}  -- id -> { id, station, x, y, z, prompt }
+
+local function inv_count(pid, item)
+  local n = 0
+  for _, it in ipairs(GetPlayerInventory(pid) or {}) do
+    if tostring(it.class or it.item or "") == item then n = n + (it.amount or 1) end
+  end
+  return n
+end
+
+local function recipe_label(recipe, lang)
+  local rdef = RES[recipe.out]
+  return rdef and (rdef.name[lang] or rdef.name.en) or recipe.out
+end
+
+local function craft_do(pid, recipe_id)
+  local recipe
+  for _, r in ipairs(RECIPES) do if r.id == recipe_id then recipe = r break end end
+  if not recipe then return end
+
+  -- the player must stand at the right station
+  local px, py, pz = GetPlayerPos(pid)
+  local at = false
+  for _, st in pairs(craft_stations) do
+    if st.station == recipe.station then
+      local dx, dy = st.x - px, st.y - py
+      if dx * dx + dy * dy < 16 then at = true break end
+    end
+  end
+  if not at then
+    local sl = STATIONS[recipe.station] or { label = { ru = "верстак", en = "a workbench" } }
+    say(pid, fmt("нужно подойти к: %s.", sl.label.ru), fmt("stand at %s first.", sl.label.en), COLOR_RED)
+    return
+  end
+
+  -- all inputs held?
+  for _, ing in ipairs(recipe.in_items) do
+    if inv_count(pid, ing.item) < ing.n then
+      local ird = RES[tostring(ing.item):gsub("^fw_", "")]
+      local nm = ird and (ird.name[lang_of(pid)] or ird.name.en) or ing.item
+      say(pid, fmt("не хватает: %s ×%d.", nm, ing.n), fmt("you lack %s x%d.", nm, ing.n), COLOR_RED)
+      return
+    end
+  end
+
+  -- take inputs, give the product
+  for _, ing in ipairs(recipe.in_items) do TakePlayerItem(pid, ing.item, ing.n) end
+  GivePlayerItem(pid, "fw_" .. recipe.out, recipe.amount or 1)
+  job_skill_up(pid, recipe.skill)
+  AddPlayerSkillXP(pid, recipe.skill == "smithing" and "craftsmanship" or "craftsmanship", recipe.xp or 3)
+  local rname = recipe_label(recipe, lang_of(pid))
+  say(pid, fmt("готово: %s ×%d.", rname, recipe.amount or 1), fmt("made: %s x%d.", rname, recipe.amount or 1), COLOR_YELLOW)
+end
+
+local function craft_list(pid, station)
+  local lang = lang_of(pid)
+  local out = {}
+  for _, r in ipairs(RECIPES) do
+    if not station or r.station == station then
+      local need = {}
+      for _, ing in ipairs(r.in_items) do
+        local ird = RES[tostring(ing.item):gsub("^fw_", "")]
+        need[#need + 1] = fmt("%s ×%d", ird and (ird.name[lang] or ird.name.en) or ing.item, ing.n)
+      end
+      out[#out + 1] = {
+        id = r.id, station = r.station,
+        station_label = (STATIONS[r.station] or { label = { ru = "верстак", en = "bench" } }).label[lang],
+        out = recipe_label(r, lang), amount = r.amount or 1,
+        need = table.concat(need, ", "),
+        have_skill = job_skill_of(pid, r.skill),
+      }
+    end
+  end
+  return out
+end
 local job_skills = {}    -- pid -> { mining = n, farming = n, woodcutting = n }
 local job_hit_cd = {}   -- pid -> earliest next hit time (anti-macro)
 local arch_interaction, architect_npc = nil, nil   -- the builder's use point and actor
@@ -382,7 +499,7 @@ end
 local function job_work_start(pid, kind, site_id)
   local site = (site_id and job_sites[site_id]) or job_find_near(pid, kind)
   if not site then
-    say(pid, "Р·РґРµСЃСЊ РЅРµС‚ СЂР°Р±РѕС‚С‹ вЂ” РёРґРё Рє РѕС‚РјРµС‡РµРЅРЅРѕРјСѓ РјРµСЃС‚Сѓ (/goto).", "no work site here - walk to a marked site (/goto).", COLOR_RED)
+    say(pid, "здесь нет работы — иди к отмеченному месту (/goto).", "no work site here - walk to a marked site (/goto).", COLOR_RED)
     return
   end
   local def = JOBS[site.kind]
@@ -395,29 +512,29 @@ local function job_work_start(pid, kind, site_id)
   end
   local skill = job_skill_of(pid, def.skill)
   local names = {
-    mine = { ru = "РєР°РјРЅРµР№", en = "rocks" },
-    forest = { ru = "СЃС‚РІРѕР»РѕРІ", en = "trunks" },
-    farm = { ru = "СЃРЅРѕРїРѕРІ", en = "sheaves" },
+    mine = { ru = "камней", en = "rocks" },
+    forest = { ru = "стволов", en = "trunks" },
+    farm = { ru = "снопов", en = "sheaves" },
   }
   local tools = {
-    mine = { ru = "РєРёСЂРєСѓ, РјРѕР»РѕС‚ РёР»Рё Р»РѕРїР°С‚Сѓ", en = "a pickaxe, hammer or shovel" },
-    forest = { ru = "С‚РѕРїРѕСЂ Р»РµСЃРѕСЂСѓР±Р°", en = "a woodcutter's axe" },
-    farm = { ru = "Р»РѕРїР°С‚Сѓ, РјРѕС‚С‹РіСѓ РёР»Рё СЃРµСЂРї", en = "a shovel, hoe or sickle" },
+    mine = { ru = "кирку, молот или лопату", en = "a pickaxe, hammer or shovel" },
+    forest = { ru = "топор лесоруба", en = "a woodcutter's axe" },
+    farm = { ru = "лопату, мотыгу или серп", en = "a shovel, hoe or sickle" },
   }
   local skills = {
-    mine = { ru = "РіРѕСЂРЅРѕРµ РґРµР»Рѕ", en = "mining" },
-    forest = { ru = "Р»РµСЃРѕСЂСѓР±РєР°", en = "woodcutting" },
-    farm = { ru = "Р·РµРјР»РµРґРµР»РёРµ", en = "farming" },
+    mine = { ru = "горное дело", en = "mining" },
+    forest = { ru = "лесорубка", en = "woodcutting" },
+    farm = { ru = "земледелие", en = "farming" },
   }
-  local tt = tools[site.kind] or { ru = "РёРЅСЃС‚СЂСѓРјРµРЅС‚", en = "a tool" }
-  local nn = names[site.kind] or { ru = "СЂРµСЃСѓСЂСЃРѕРІ", en = "nodes" }
-  local ss = skills[site.kind] or { ru = "РЅР°РІС‹Рє", en = "skill" }
+  local tt = tools[site.kind] or { ru = "инструмент", en = "a tool" }
+  local nn = names[site.kind] or { ru = "ресурсов", en = "nodes" }
+  local ss = skills[site.kind] or { ru = "навык", en = "skill" }
   if standing == 0 then
-    say(pid, fmt("%s РёСЃС‚РѕС‰РµРЅРѕ вЂ” %s РІС‹СЂР°СЃС‚СѓС‚ СЃРЅРѕРІР° СЃРѕ РІСЂРµРјРµРЅРµРј.", site.label or def.label, nn.ru),
+    say(pid, fmt("%s истощено — %s вырастут снова со временем.", site.label or def.label, nn.ru),
       fmt("%s is worked out - the %s grow back with time.", site.label or def.label, nn.en), COLOR_RED)
     return
   end
-  say(pid, fmt("%s: %d %s. Р”РµСЂР¶Рё РІ СЂСѓРєР°С… %s Рё Р±РµР№ РёС…. РўРІРѕР№ РЅР°РІС‹Рє (%s): %d.",
+  say(pid, fmt("%s: %d %s. Держи в руках %s и бей их. Твой навык (%s): %d.",
     site.label or def.label, standing, nn.ru, tt.ru, ss.ru, skill),
     fmt("%s: %d %s here. Hold %s and strike them. Your %s: %d.",
       site.label or def.label, standing, nn.en, tt.en, ss.en, skill), COLOR_YELLOW)
@@ -435,8 +552,8 @@ local function job_on_hit(pid, hit)
   local tool_ok = true
   if def and def.tools then tool_ok = job_has_tool(pid, def) end
   if not tool_ok then
-    local tr = { mine = "РєРёСЂРєСѓ, РјРѕР»РѕС‚ РёР»Рё Р»РѕРїР°С‚Сѓ", forest = "С‚РѕРїРѕСЂ Р»РµСЃРѕСЂСѓР±Р°", farm = "Р»РѕРїР°С‚Сѓ, РјРѕС‚С‹РіСѓ РёР»Рё СЃРµСЂРї" }
-    say(pid, fmt("РЅСѓР¶РЅРѕ РІР·СЏС‚СЊ РІ СЂСѓРєРё %s.", tr[n.kind] or "РёРЅСЃС‚СЂСѓРјРµРЅС‚"),
+    local tr = { mine = "кирку, молот или лопату", forest = "топор лесоруба", farm = "лопату, мотыгу или серп" }
+    say(pid, fmt("нужно взять в руки %s.", tr[n.kind] or "инструмент"),
       fmt("you need %s in your hands.", def.tool_names), COLOR_RED)
     return
   end
@@ -444,7 +561,7 @@ local function job_on_hit(pid, hit)
   pcall(PlaySound, (def and def.hit_sound) or "special_blacksmith_hammer_anvil", hit.x, hit.y, hit.z, 2)
   node_damage(n, pid, 1)
   if n.hp > 0 then
-    say(pid, fmt("С‚СЂРµСЃРє... (%d/%d)", n.hp_max - n.hp, n.hp_max), fmt("crack... (%d/%d)", n.hp_max - n.hp, n.hp_max), COLOR_SERVER)
+    say(pid, fmt("треск... (%d/%d)", n.hp_max - n.hp, n.hp_max), fmt("crack... (%d/%d)", n.hp_max - n.hp, n.hp_max), COLOR_SERVER)
   end
 end
 
@@ -477,8 +594,8 @@ local function job_status(pid)
       end
       local skill = job_skill_of(pid, def.skill)
       lines[#lines + 1] = say_text(pid,
-        fmt("%s вЂ” %d Рј, %d Р¶РёР», РЅР°РІС‹Рє %s %d", site.label or def.label, math.floor(dist), standing,
-          ({ mine = "РіРѕСЂРЅРѕРµ РґРµР»Рѕ", forest = "Р»РµСЃРѕСЂСѓР±РєР°", farm = "Р·РµРјР»РµРґРµР»РёРµ" })[site.kind] or def.skill, skill),
+        fmt("%s — %d м, %d жил, навык %s %d", site.label or def.label, math.floor(dist), standing,
+          ({ mine = "горное дело", forest = "лесорубка", farm = "земледелие" })[site.kind] or def.skill, skill),
         fmt("%s - %d m, %d node(s), %s %d", site.label or def.label, math.floor(dist), standing, def.skill, skill))
     end
   end
@@ -745,6 +862,7 @@ function OnGameModeInit()
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_nodes (id VARCHAR(64) PRIMARY KEY, kind VARCHAR(24) NOT NULL DEFAULT 'node', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, hp INT NOT NULL DEFAULT 4, hp_max INT NOT NULL DEFAULT 4, res VARCHAR(16) NOT NULL DEFAULT 'stone', respawn_at BIGINT NOT NULL DEFAULT 0, mapid INT NOT NULL DEFAULT 0, mesh VARCHAR(255), label VARCHAR(64), is_map TINYINT NOT NULL DEFAULT 0)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_blueprints (name VARCHAR(48) PRIMARY KEY, parts MEDIUMTEXT, cost INT NOT NULL DEFAULT 0, author VARCHAR(32))")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_npcs (id INT PRIMARY KEY, role VARCHAR(16) NOT NULL DEFAULT 'civilian', name VARCHAR(64) NOT NULL DEFAULT '', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0, yaw DOUBLE NOT NULL DEFAULT 0, prompt VARCHAR(64) NOT NULL DEFAULT '', data MEDIUMTEXT)")
+    db:ExecuteSync("CREATE TABLE IF NOT EXISTS fw_stations (id VARCHAR(48) PRIMARY KEY, station VARCHAR(16) NOT NULL DEFAULT 'forge', x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 0, z DOUBLE NOT NULL DEFAULT 0)")
     db:ExecuteSync("CREATE TABLE IF NOT EXISTS auction (id INT AUTO_INCREMENT PRIMARY KEY, seller VARCHAR(32), res VARCHAR(16), amount INT NOT NULL DEFAULT 1, price INT NOT NULL DEFAULT 1)")
     local arows = db:QuerySync("SELECT id, seller, res, amount, price FROM auction")
     if arows then
@@ -757,9 +875,11 @@ function OnGameModeInit()
     local srows = db:QuerySync("SELECT id, kind, x, y, z, stock FROM job_sites")
     if srows then
       for _, r in ipairs(srows) do
-        job_sites[r.id] = { id = r.id, kind = r.kind, x = r.x, y = r.y, z = r.z, stock = r.stock or 0 }
+        -- work-kind sites are rebuilt from the plan below; keep only other kinds
+        if r.kind ~= "mine" and r.kind ~= "farm" and r.kind ~= "forest" then
+          job_sites[r.id] = { id = r.id, kind = r.kind, x = r.x, y = r.y, z = r.z, stock = r.stock or 0 }
+        end
       end
-      Log("feudalwars: loaded " .. #srows .. " job site(s)")
     end
   end
 
@@ -799,20 +919,17 @@ function OnGameModeInit()
     site_raise_nodes(site)
   end
 
-  -- load admin-mapped sites from the database first; else use the plan
-  local have_sites = next(job_sites) ~= nil
-  if not have_sites then
-    for _, p in ipairs(SITE_PLAN) do site_place(p.id, p.kind, sx + p.dx, sy + p.dy, p.label) end
-  else
-    for _, site in pairs(job_sites) do
-      -- re-snap every loaded site to the ground (old rows may carry a bad z)
-      site.z = ground_z(site.x, site.y, site.z)
-      site_show(site)
-      site_raise_nodes(site)
-    end
+  -- The plan's sites are authoritative: wipe any old row and old node for them,
+  -- so a bad coordinate or a stale mesh from an earlier build never comes back.
+  if db then
+    -- drop every work-kind site and node from earlier builds; the plan rebuilds them
+    db:ExecuteSync("DELETE FROM fw_nodes WHERE kind IN ('mine','farm','forest')")
+    db:ExecuteSync("DELETE FROM job_sites WHERE kind IN ('mine','farm','forest')")
+    job_sites = {}
   end
 
-  -- restore saved nodes (state survives a restart, blueprint pieces included)
+  -- restore saved blueprint nodes first; the plan's work nodes are raised after,
+  -- so a stale fw_nodes row can never overwrite a fresh plan node
   if db then
     local nrows = db:QuerySync("SELECT id, kind, x, y, z, hp, hp_max, res, respawn_at, mapid, mesh, label, is_map FROM fw_nodes")
     if nrows then
@@ -835,7 +952,6 @@ function OnGameModeInit()
         })
         n.hp = r.hp or n.hp_max
         if n.hp > 0 then
-          -- bind the standing object (a prop or a map object)
           if is_map and r.mapid and r.mapid > 0 then
             n.entity = r.mapid
             node_by_entity[r.mapid] = n.key
@@ -843,7 +959,6 @@ function OnGameModeInit()
             node_show(n)
           end
         else
-          -- broken: make sure nothing stands there
           if is_map and r.mapid and r.mapid > 0 then
             pcall(DeleteMapObject, r.mapid)
           end
@@ -852,6 +967,8 @@ function OnGameModeInit()
       Log("feudalwars: loaded " .. #nrows .. " node(s)")
     end
   end
+
+  for _, p in ipairs(SITE_PLAN) do site_place(p.id, p.kind, sx + p.dx, sy + p.dy, p.label) end
 
   -- node growth: a broken node returns when its time comes
   SetTimer(function()
@@ -876,6 +993,20 @@ function OnGameModeInit()
   -- the architect: an NPC by the spawn whose use key opens the blueprint workshop
   bp_load_all()
   npc_load_all()
+  -- load craft stations and their use points
+  if db then
+    local strows = db:QuerySync("SELECT id, station, x, y, z FROM fw_stations")
+    if strows then
+      for _, r in ipairs(strows) do
+        local z = ground_z(r.x, r.y, r.z)
+        local st = { id = r.id, station = r.station, x = r.x, y = r.y, z = z }
+        craft_stations[r.id] = st
+        local ie = CreateInteraction(r.x, r.y, z, "Work the " .. r.station, 2.0, nil)
+        if ie then st.interact = ie end
+      end
+      Log("feudalwars: loaded " .. #strows .. " station(s)")
+    end
+  end
   local architect = CreateActor(nil, sx + 4.0, sy + 3.0, sz, 0, "Master Builder Havel", nil, "none", nil)
   if architect then
     SetActorPrompt(architect, "Plan a structure")
@@ -1216,13 +1347,13 @@ end
 local STR = {
   en = {
     menu_title = "Feudal Wars",
-    menu_keys = "E вЂ” ask about work В· F2 вЂ” this menu В· Esc вЂ” close",
+    menu_keys = "F2 — this menu · Esc — close · strike the veins with a tool",
     lang_saved = "Language: English.",
   },
   ru = {
-    menu_title = "Р¤РµРѕРґР°Р»СЊРЅС‹Рµ РІРѕР№РЅС‹",
-    menu_keys = "E вЂ” СЃРїСЂРѕСЃРёС‚СЊ Рѕ СЂР°Р±РѕС‚Рµ В· F2 вЂ” СЌС‚Рѕ РјРµРЅСЋ В· Esc вЂ” Р·Р°РєСЂС‹С‚СЊ",
-    lang_saved = "РЇР·С‹Рє: СЂСѓСЃСЃРєРёР№.",
+    menu_title = "Феодальные войны",
+    menu_keys = "F2 — это меню · Esc — закрыть · бей жилы инструментом",
+    lang_saved = "Язык: русский.",
   },
 }
 
@@ -1275,19 +1406,19 @@ MENU_TEXT = {
     editor_t = "Map editor", editor_d = "The game's own editor: fly, place meshes",
   },
   ru = {
-    me_t = "РњРѕР№ РїРµСЂСЃРѕРЅР°Р¶", me_d = "РљРѕС€РµР»С‘Рє, РґРѕРј Рё РїРѕР»РѕР¶РµРЅРёРµ",
-    work_t = "Р Р°Р±РѕС‚Р°С‚СЊ РЅР° Р¶РёР»Р°С…", work_d = "Р‘РµР№ РєР°РјРЅРё, СЃС‚РІРѕР»С‹ Рё СЃРЅРѕРїС‹ вЂ” СЂСѓРґР°, РґРµСЂРµРІРѕ, Р·РµСЂРЅРѕ",
-    auction_t = "РўРѕСЂРі", auction_d = "РџСЂРѕРґР°Р№ С‚РѕРІР°СЂ, РєСѓРїРё Сѓ РґСЂСѓРіРёС… РёРіСЂРѕРєРѕРІ",
-    goto_mine_t = "Рљ РєР°РјРµРЅРѕР»РѕРјРЅСЏРј", goto_mine_d = "РљСѓС‚С‚РµРЅР±РµСЂРіСЃРєР°СЏ РєР°РјРµРЅРѕР»РѕРјРЅСЏ Рё РіРѕСЂРЅС‹Р№ С€С‚СЂРµРє",
-    goto_farm_t = "Рљ РїРѕР»СЏРј", goto_farm_d = "РќРёР·РёРЅРЅС‹Рµ Рё РјРµР»СЊРЅРёС‡РЅС‹Рµ РїРѕР»СЏ",
-    goto_forest_t = "Рљ Р»РµСЃР°Рј", goto_forest_d = "РЎРµРІРµСЂРЅС‹Р№ Р»РµСЃ Рё СЃС‚Р°СЂР°СЏ СЂРѕС‰Р°",
-    goto_spawn_t = "РќР° РїР»РѕС‰Р°РґСЊ", goto_spawn_d = "РћР±СЂР°С‚РЅРѕ Рє С‚РѕС‡РєРµ РїРѕСЏРІР»РµРЅРёСЏ",
-    skills_t = "РњРѕРё РЅР°РІС‹РєРё", skills_d = "Р“РѕСЂРЅРѕРµ РґРµР»Рѕ, Р·РµРјР»РµРґРµР»РёРµ, Р»РµСЃРѕСЂСѓР±РєР°",
-    kit_t = "РћРґРѕР»Р¶РёС‚СЊ РёРЅСЃС‚СЂСѓРјРµРЅС‚", kit_d = "Р‘СЂРёРіР°РґРёСЂ РІС‹РґР°СЃС‚ РЅСѓР¶РЅС‹Р№ РёРЅСЃС‚СЂСѓРјРµРЅС‚ Сѓ Р±Р»РёР¶РЅРµР№ С‚РѕС‡РєРё",
-    hall_t = "Р—Р°Р» РґРѕРјР°", hall_d = "Р›СЋРґРё, РєР°Р·РЅР° Рё РІРѕР№РЅС‹",
-    trade_t = "РўРѕСЂРі", trade_d = "РћС‚РєСЂС‹С‚СЊ С‚РѕСЂРіРѕРІС‹Р№ РґРѕРј",
-    build_t = "Р—РѕРґС‡РёР№", build_d = "Р Р°Р·Р»РѕР¶Рё, СЃРѕС…СЂР°РЅРё Рё СЃС‚Р°РІСЊ С‡РµСЂС‚РµР¶Рё (Р°РґРјРёРЅС‹)",
-    editor_t = "Р РµРґР°РєС‚РѕСЂ РєР°СЂС‚С‹", editor_d = "Р’СЃС‚СЂРѕРµРЅРЅС‹Р№ СЂРµРґР°РєС‚РѕСЂ: РїРѕР»С‘С‚, РѕР±СЉРµРєС‚С‹",
+    me_t = "Мой персонаж", me_d = "Кошелёк, дом и положение",
+    work_t = "Работать на жилах", work_d = "Бей камни, стволы и снопы — руда, дерево, зерно",
+    auction_t = "Торг", auction_d = "Продай товар, купи у других игроков",
+    goto_mine_t = "К каменоломням", goto_mine_d = "Куттенбергская каменоломня и горный штрек",
+    goto_farm_t = "К полям", goto_farm_d = "Низинные и мельничные поля",
+    goto_forest_t = "К лесам", goto_forest_d = "Северный лес и старая роща",
+    goto_spawn_t = "На площадь", goto_spawn_d = "Обратно к точке появления",
+    skills_t = "Мои навыки", skills_d = "Горное дело, земледелие, лесорубка",
+    kit_t = "Одолжить инструмент", kit_d = "Бригадир выдаст нужный инструмент у ближней точки",
+    hall_t = "Зал дома", hall_d = "Люди, казна и войны",
+    trade_t = "Торг", trade_d = "Открыть торговый дом",
+    build_t = "Зодчий", build_d = "Разложи, сохрани и ставь чертежи (админы)",
+    editor_t = "Редактор карты", editor_d = "Встроенный редактор: полёт, объекты",
   },
 }
 
@@ -1480,11 +1611,11 @@ local NPC_ROLES = { vendor = true, trainer = true, guard = true, quest = true, c
 
 local function npc_role_label(role, lang)
   local L = {
-    vendor = { en = "Vendor", ru = "РўРѕСЂРіРѕРІРµС†" },
-    trainer = { en = "Trainer", ru = "РЈС‡РёС‚РµР»СЊ" },
-    guard = { en = "Guard", ru = "РЎС‚СЂР°Р¶РЅРёРє" },
-    quest = { en = "Quest giver", ru = "Р”Р°С‘С‚ РїРѕСЂСѓС‡РµРЅРёСЏ" },
-    civilian = { en = "Citizen", ru = "Р“РѕСЂРѕР¶Р°РЅРёРЅ" },
+    vendor = { en = "Vendor", ru = "Торговец" },
+    trainer = { en = "Trainer", ru = "Учитель" },
+    guard = { en = "Guard", ru = "Стражник" },
+    quest = { en = "Quest giver", ru = "Даёт поручения" },
+    civilian = { en = "Citizen", ru = "Горожанин" },
   }
   local r = L[role] or L.civilian
   return r[lang] or r.en
@@ -1551,17 +1682,17 @@ end
 
 local function npc_create(pid, role, name)
   if not isAdmin(pid) then
-    say(pid, "С‚РѕР»СЊРєРѕ СЃР»СѓРіРё РєРѕСЂРѕРЅС‹ СЃС‚Р°РІСЏС‚ Р»СЋРґРµР№.", "only the crown's servants place people.", COLOR_RED)
+    say(pid, "только слуги короны ставят людей.", "only the crown's servants place people.", COLOR_RED)
     return
   end
   role = (role or ""):lower()
   if not NPC_ROLES[role] then
-    say(pid, "СЂРѕР»Рё: vendor, trainer, guard, quest, civilian.", "roles: vendor, trainer, guard, quest, civilian.", COLOR_RED)
+    say(pid, "роли: vendor, trainer, guard, quest, civilian.", "roles: vendor, trainer, guard, quest, civilian.", COLOR_RED)
     return
   end
   name = tostring(name or "")
   if #name < 2 then
-    say(pid, "РґР°Р№ РёРјСЏ: /npc add <СЂРѕР»СЊ> <РёРјСЏ>.", "give a name: /npc add <role> <name>.", COLOR_RED)
+    say(pid, "дай имя: /npc add <роль> <имя>.", "give a name: /npc add <role> <name>.", COLOR_RED)
     return
   end
   local px, py, pz = GetPlayerPos(pid)
@@ -1571,7 +1702,7 @@ local function npc_create(pid, role, name)
   npcs[id] = n
   npc_persist(n)
   npc_spawn(n)
-  say(pid, fmt("РїРѕСЃС‚Р°РІР»РµРЅ %s В«%sВ» (#%d).", npc_role_label(role, "ru"), name, id),
+  say(pid, fmt("поставлен %s «%s» (#%d).", npc_role_label(role, "ru"), name, id),
     fmt("placed %s '%s' (#%d).", npc_role_label(role, "en"), name, id), COLOR_YELLOW)
 end
 
@@ -1605,40 +1736,40 @@ end
 
 local BUILD_CATALOG = {
   tent = {
-    label = { en = "Campaign tent", ru = "РџРѕС…РѕРґРЅР°СЏ РїР°Р»Р°С‚РєР°" },
+    label = { en = "Campaign tent", ru = "Походная палатка" },
     parts = { "objects/manmade/structures/living/tents/tent_big_fancy_a.cgf" },
   },
   stall = {
-    label = { en = "Market stall", ru = "РўРѕСЂРіРѕРІР°СЏ Р»Р°РІРєР°" },
+    label = { en = "Market stall", ru = "Торговая лавка" },
     parts = {
       "objects/manmade/task_specific_props/trade/merge_market_bread_stand.cgf",
       "objects/manmade/common_furniture/barrels/barrel_a.cgf",
     },
   },
   camp = {
-    label = { en = "Campfire", ru = "РљРѕСЃС‚С‘СЂ" },
+    label = { en = "Campfire", ru = "Костёр" },
     parts = {
       "objects/manmade/task_specific_props/food_processing/cooking/fireplace_wood_a.cgf",
       "objects/manmade/common_furniture/crates/crate_low_a.cgf",
     },
   },
   palisade = {
-    label = { en = "Palisade wall", ru = "Р§Р°СЃС‚РѕРєРѕР»" },
+    label = { en = "Palisade wall", ru = "Частокол" },
     parts = { "objects/manmade/structures/defensive/walls/palisade/palisade_wall_a_v1.cgf" },
   },
   tower = {
-    label = { en = "Watch tower", ru = "РЎС‚РѕСЂРѕР¶РµРІР°СЏ Р±Р°С€РЅСЏ" },
+    label = { en = "Watch tower", ru = "Сторожевая башня" },
     parts = { "objects/manmade/structures/defensive/castles/unique/trosky/panna_wooden_tower.cgf" },
   },
   forge = {
-    label = { en = "Field forge", ru = "РџРѕР»РµРІР°СЏ РєСѓР·РЅСЏ" },
+    label = { en = "Field forge", ru = "Полевая кузня" },
     parts = {
       "objects/manmade/task_specific_props/metal_industry/smithing/anvil.cgf",
       "objects/manmade/task_specific_props/metal_industry/smithing/forge_small_a.cgf",
     },
   },
   rock_pile = {
-    label = { en = "Rock pile (mineable)", ru = "РќР°РіСЂРѕРјРѕР¶РґРµРЅРёРµ РєР°РјРЅРµР№ (РґРѕР±С‹С‡Р°)" },
+    label = { en = "Rock pile (mineable)", ru = "Нагромождение камней (добыча)" },
     parts = { "objects/natural/rocks/boulder_granite_a.cgf", "objects/natural/rocks/boulder_granite_a.cgf" },
     nodes = true,   -- its rocks are breakable on every copy
   },
@@ -1832,7 +1963,7 @@ end, { help = "the architect: lay out, save and stamp blueprints (admins)" })
 
 RegisterCommand("npc", function(pid, args)
   if not isAdmin(pid) then
-    say(pid, "С‚РѕР»СЊРєРѕ СЃР»СѓРіРё РєРѕСЂРѕРЅС‹ СЃС‚Р°РІСЏС‚ Р»СЋРґРµР№.", "only the crown's servants place people.", COLOR_RED)
+    say(pid, "только слуги короны ставят людей.", "only the crown's servants place people.", COLOR_RED)
     return
   end
   local verb, rest = args:match("^(%S*)%s*(.-)$")
@@ -1850,7 +1981,7 @@ RegisterCommand("npc", function(pid, args)
       if n.shop then pcall(DestroyShop, n.shop) end
       npcs[id] = nil
       if db then db:Execute("DELETE FROM fw_npcs WHERE id = @i", { i = id }, function() end) end
-      say(pid, fmt("NPC #%d СѓР±СЂР°РЅ.", id), fmt("NPC #%d removed.", id), COLOR_SERVER)
+      say(pid, fmt("NPC #%d убран.", id), fmt("NPC #%d removed.", id), COLOR_SERVER)
     end
   else
     say(pid, "usage: /npc add <role> <name> | list | remove <id>",
@@ -1858,8 +1989,40 @@ RegisterCommand("npc", function(pid, args)
   end
 end, { help = "place and configure NPCs (admins)", params = "add|list|remove", admin = true })
 
+RegisterCommand("craft", function(pid, args)
+  local station = (args:match("^(%S*)") or ""):lower()
+  if station ~= "" and not STATIONS[station] then station = "" end
+  open_frame(pid, "craft")
+  SendPlayerWebMessage(pid, "craft", { lang = lang_of(pid), recipes = craft_list(pid, station ~= "" and station or nil) })
+end, { help = "the workshop: turn raw goods into finished", params = "[station]" })
+
+RegisterCommand("station", function(pid, args)
+  if not isAdmin(pid) then
+    say(pid, "только слуги короны ставят верстаки.", "only the crown's servants place stations.", COLOR_RED)
+    return
+  end
+  local station = (args:match("^(%S*)") or ""):lower()
+  if not STATIONS[station] then
+    say(pid, "верстаки: forge, sawbench, mill, oven.", "stations: forge, sawbench, mill, oven.", COLOR_RED)
+    return
+  end
+  local px, py, pz = GetPlayerPos(pid)
+  local id = station .. math.floor(px) .. "_" .. math.floor(py)
+  local z = ground_z(px, py, pz)
+  craft_stations[id] = { id = id, station = station, x = px, y = py, z = z }
+  if db then
+    db:Execute("INSERT INTO fw_stations (id, station, x, y, z) VALUES (@i, @s, @x, @y, @z) " ..
+      "ON DUPLICATE KEY UPDATE station=@s2, x=@x2, y=@y2, z=@z2",
+      { i = id, s = station, x = px, y = py, z = z, s2 = station, x2 = px, y2 = py, z2 = z }, function() end)
+  end
+  local prompt = "Work the " .. station
+  local ie = CreateInteraction(px, py, z, prompt, 2.0, nil)
+  if ie then craft_stations[id].interact = ie end
+  say(pid, fmt("верстак «%s» поставлен.", STATIONS[station].label.ru),
+    fmt("station '%s' placed.", STATIONS[station].label.en), COLOR_YELLOW)
+end, { help = "place a craft station (admins)", params = "<forge|sawbench|mill|oven>", admin = true })
+
 RegisterCommand("arch", function(pid, args)
-  if not isAdmin(pid) then SendClientMessage(pid, COLOR_RED, "only the crown's servants may build."); return end
   local verb, rest = args:match("^(%S*)%s*(.-)$")
   verb = (verb or ""):lower()
   if verb == "new" then
@@ -1930,11 +2093,19 @@ function OnPlayerInteract(pid, id)
     arch_open(pid)
     return
   end
+  -- a craft station: open the workshop
+  for _, st in pairs(craft_stations) do
+    if st.interact == id then
+      open_frame(pid, "craft")
+      SendPlayerWebMessage(pid, "craft", { lang = lang_of(pid), recipes = craft_list(pid, st.station) })
+      return
+    end
+  end
   local nkey = node_by_entity[id]
   if nkey then
     local n = nodes[nkey]
     if n and n.hp > 0 then
-      say(pid, fmt("%s вЂ” %d/%d. Р‘РµР№ РЅСѓР¶РЅС‹Рј РёРЅСЃС‚СЂСѓРјРµРЅС‚РѕРј.", n.label or "РєР°РјРµРЅСЊ", n.hp, n.hp_max),
+      say(pid, fmt("%s — %d/%d. Бей нужным инструментом.", n.label or "камень", n.hp, n.hp_max),
         fmt("%s - %d/%d. Strike it with the right tool.", n.label or "the stone", n.hp, n.hp_max), COLOR_SERVER)
     end
     return
@@ -2107,6 +2278,12 @@ local function web_event(pid, name, data)
     arch_open(pid)
   elseif name == "npc.close" then
     close_frame(pid, "npc")
+  elseif name == "craft.close" then
+    close_frame(pid, "craft")
+  elseif name == "craft.make" then
+    craft_do(pid, tostring(data.id or ""))
+    open_frame(pid, "craft")
+    SendPlayerWebMessage(pid, "craft", { lang = lang_of(pid), recipes = craft_list(pid, nil) })
   elseif name == "npc.remove" then
     local id = math.floor(tonumber(data.id) or 0)
     local n = npcs[id]
@@ -2132,7 +2309,7 @@ local function web_event(pid, name, data)
       if not found then n.data.stock[#n.data.stock + 1] = { item = item, price = price, amount = -1 } end
       npc_persist(n)
       if n.shop then pcall(SetShopItem, n.shop, item, price, -1) end
-      say(pid, "С‚РѕРІР°СЂ РЅР° РїСЂРёР»Р°РІРєРµ.", "the good is on the counter.", COLOR_YELLOW)
+      say(pid, "товар на прилавке.", "the good is on the counter.", COLOR_YELLOW)
       npc_open_admin(pid)
     end
   elseif name == "admin.close" then
