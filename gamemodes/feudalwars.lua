@@ -95,7 +95,7 @@ local JOBS = {
     icon = "troskyQuarry", icon_num = 48,
     tools = { "pickaxe", "hammer", "normalHammer", "shovel" },
     tool_names = "a pickaxe, hammer or shovel",
-    vein_mesh = "objects/natural/rocks/boulder_granite_a.cgf", vein_scale = 1.2,
+    vein_mesh = "objects/natural/rocks/rocks_big/rocks_big_a.cgf", vein_scale = 1.0,
     hit_effect = "collisions.rock_hit",
     hit_sound = "special_blacksmith_hammer_anvil",
     drops = { { res = "stone", w = 45 }, { res = "coal", w = 30 }, { res = "iron", w = 18 }, { res = "silver", w = 5 }, { res = "gold", w = 2 } },
@@ -107,7 +107,7 @@ local JOBS = {
     icon = "miller", icon_num = 21,
     tools = { "shovel", "hoe", "sickle", "scythe" },
     tool_names = "a shovel, hoe or sickle",
-    vein_mesh = "objects/manmade/common_furniture/crates/crate_low_a.cgf", vein_scale = 0.9,
+    vein_mesh = "objects/natural/vegetation/grass/hay/hay_a.cgf", vein_scale = 1.0,
     hit_effect = "collisions.dirt_hit",
     hit_sound = "special_digging",
     drops = { { res = "grain", w = 100 } },
@@ -119,7 +119,7 @@ local JOBS = {
     icon = "camp", icon_num = 38,
     tools = { "lumberjack_axe", "axe", "woodaxe", "hatchet" },
     tool_names = "a woodcutter's axe",
-    vein_mesh = "objects/natural/trees/oak/oak_trunk_a.cgf", vein_scale = 1.0,
+    vein_mesh = "objects/natural/vegetation/trees/fallen_trees/tree_log_b.cgf", vein_scale = 1.0,
     hit_effect = "collisions.wood_hit",
     hit_sound = "special_wood_chop",
     drops = { { res = "wood", w = 100 } },
@@ -144,20 +144,27 @@ local function node_hash(kind, x, y)
   return fmt("%s_%d_%d", kind, math.floor(x), math.floor(y))
 end
 
--- where the ground is, in order of trust: the navmesh's walkable floor (players
-  -- stand there), then the collision floor, then the terrain heightmap, then the
-  -- nearest navmesh point. Only if none answers do we keep the hint. This is why
-  -- sites used to float or sink: GetTerrainHeight is nil without a heightmap.
+-- where the ground is. The server may have no heightmap or navmesh, so we cast a
+  -- ray straight down from high above (RayCast needs the collision export) and fall
+  -- back through the other sources. GetGroundZ only looks 100 m down from the point
+  -- given, so it is asked from high above, never from the spawn height.
 local function ground_z(x, y, hint)
   hint = hint or 0
-  local ok, z = pcall(GetNavmeshHeight, x, y, hint)
-  if ok and type(z) == "number" then return z end
-  ok, z = pcall(GetGroundZ, x, y, hint + 100.0)
-  if ok and type(z) == "number" then return z end
-  ok, z = pcall(GetTerrainHeight, x, y)
-  if ok and type(z) == "number" then return z end
-  ok, z = pcall(NearestNavmeshPoint, x, y, hint)
-  if ok and z and type(z) == "table" and type(z.z) == "number" then return z.z end
+  -- 1) a ray from the sky to below the world: the true surface if collision exists
+  local ok, hit = pcall(RayCast, x, y, 1000.0, x, y, -200.0)
+  if ok and hit and type(hit) == "table" and type(hit.z) == "number" then return hit.z end
+  -- 2) the collision floor, asked from high above so the 100 m reach covers the drop
+  ok, hit = pcall(GetGroundZ, x, y, 900.0)
+  if ok and type(hit) == "number" then return hit end
+  -- 3) the navmesh floor near the hint
+  ok, hit = pcall(GetNavmeshHeight, x, y, hint)
+  if ok and type(hit) == "number" then return hit end
+  -- 4) the terrain heightmap
+  ok, hit = pcall(GetTerrainHeight, x, y)
+  if ok and type(hit) == "number" then return hit end
+  -- 5) the nearest navmesh point
+  ok, hit = pcall(NearestNavmeshPoint, x, y, hint)
+  if ok and hit and type(hit) == "table" and type(hit.z) == "number" then return hit.z end
   return hint
 end
 
@@ -175,14 +182,16 @@ local function node_persist(n)
     function() end)
 end
 
--- a node's visual: always a map object. CreateMapObject with z < 0 puts the mesh
-  -- on the ground itself (the engine snaps it), which is why nodes no longer float
-  -- or sink. A node's object is the real game mesh the player can see and strike.
+-- a node's visual: a map object placed at an explicit height. The server has no
+  -- level data (heightmap/navmesh/collision) by default, so "z < 0 = on the ground"
+  -- cannot resolve and objects float. We place at the height we computed (the spawn
+  -- height near the spawn), which is where players actually stand.
 local function node_show(n)
   if n.entity then return end
   if not n.mesh then return end
-  -- prefer a map object: z < 0 makes the engine put the mesh on the ground
-  local id, err = CreateMapObject(n.mesh, n.x, n.y, -1, {
+  local z = n.z
+  if z == nil or z < -100 then z = ground_z(n.x, n.y, n.z) end
+  local id, err = CreateMapObject(n.mesh, n.x, n.y, z, {
     yaw = n.yaw or math.random(0, 359), scale = n.scale, persist = true, solid = true,
   })
   if id then
@@ -193,10 +202,8 @@ local function node_show(n)
     node_persist(n)
     return
   end
-  -- no map (read-only or none): fall back to a static prop exactly on the ground
   Log(fmt("feudalwars: node %s map object refused (%s), using prop", n.key, tostring(err)))
-  local pz = ground_z(n.x, n.y, n.z)
-  local pid_prop = CreateProp(n.mesh, n.x, n.y, pz, n.yaw or 0, n.scale or 1, false, nil)
+  local pid_prop = CreateProp(n.mesh, n.x, n.y, z, n.yaw or 0, n.scale or 1, false, nil)
   if pid_prop then
     n.entity = pid_prop
     node_by_entity[pid_prop] = n.key
@@ -886,22 +893,25 @@ function OnGameModeInit()
   local sx, sy, sz, syaw = GetDefaultSpawn()
   AddSpawnPoint(sx, sy, sz, syaw, "town")
 
-  -- Work sites: offsets from the spawn, snapped to the walkable ground, so they
-  -- never float or sink whatever the map or the exported data. Larger offsets
-  -- give the "spread over the map" feel without guessing wild coordinates.
+  -- Work sites: kept close to the spawn. Without the level's heightmap, navmesh or
+  -- collision on the server, the ground height is only known near the spawn, so a
+  -- far offset would float. Admins move any site to its true place in the game with
+  -- /jobsite once they stand there.
   local SITE_PLAN = {
-    { id = "mine_quarry",   kind = "mine",   dx =  120, dy =  160, label = "the quarry" },
-    { id = "mine_hills",    kind = "mine",   dx = -240, dy =   90, label = "the hillside adit" },
-    { id = "farm_lowlands", kind = "farm",   dx =  -90, dy = -170, label = "the lowland fields" },
-    { id = "farm_mill",     kind = "farm",   dx =  210, dy =  -60, label = "the mill fields" },
-    { id = "forest_woods",  kind = "forest", dx =  -60, dy =  260, label = "the north woods" },
-    { id = "forest_grove",  kind = "forest", dx =  180, dy =  120, label = "the old grove" },
+    { id = "mine_quarry",   kind = "mine",   dx =  14, dy =  10, label = "the quarry" },
+    { id = "mine_hills",    kind = "mine",   dx = -16, dy =   8, label = "the hillside adit" },
+    { id = "farm_lowlands", kind = "farm",   dx = -10, dy = -14, label = "the lowland fields" },
+    { id = "farm_mill",     kind = "farm",   dx =  16, dy =  -8, label = "the mill fields" },
+    { id = "forest_woods",  kind = "forest", dx =  -8, dy =  18, label = "the north woods" },
+    { id = "forest_grove",  kind = "forest", dx =  12, dy =  14, label = "the old grove" },
   }
 
   local mapinfo = GetMapInfo()
-  Log(fmt("feudalwars: map folder=%s readOnly=%s objects=%s (level %s, navmesh=%s)",
+  Log(fmt("feudalwars: map folder=%s readOnly=%s objects=%s (level %s)",
     tostring(mapinfo and mapinfo.folder), tostring(mapinfo and mapinfo.readOnly),
-    tostring(mapinfo and mapinfo.objects), GetLevel(), tostring(HasNavmesh())))
+    tostring(mapinfo and mapinfo.objects), GetLevel()))
+  Log(fmt("feudalwars: world data navmesh=%s collision=%s heightmap=%s",
+    tostring(HasNavmesh()), tostring(HasCollision()), tostring(GetTerrainHeight(sx, sy) ~= nil)))
   for _, t in ipairs(GetMapIconTypes() or {}) do icon_types[t.name or ""] = true end
   discover_veins()
 
@@ -1499,6 +1509,51 @@ RegisterCommand("help", function(pid)
   open_menu(pid)
 end, { help = "list all commands with descriptions" })
 
+-- a plain chat list of every command, split into player and admin, so nothing is
+-- hidden behind the menu. /commands [admin]
+RegisterCommand("commands", function(pid, args)
+  local want_admin = (args:match("^(%S*)") or ""):lower() == "admin"
+  local ru = lang_of(pid) == "ru"
+  local function line(cmd, en, rutext)
+    SendClientMessage(pid, COLOR_SERVER, "  " .. cmd .. " — " .. (ru and rutext or en))
+  end
+  if not want_admin then
+    SendClientMessage(pid, COLOR_YELLOW, ru and "Команды игрока:" or "Player commands:")
+    line("/me", "your character", "твой персонаж")
+    line("/hall", "house hall", "зал дома")
+    line("/house create|join|leave|list|info", "found, join or leave a house", "создать дом, вступить, уйти, список")
+    line("/war declare|peace|status", "wars", "войны")
+    line("/job mine|farm|forest|kit|skills", "work the veins", "работа на жилах")
+    line("/craft [station]", "the workshop: raw into goods", "мастерская: сырьё в изделия")
+    line("/auction", "the market", "торг")
+    line("/goto mine|farm|forest|spawn", "walk to a place", "перейти к месту")
+    line("/money", "your purse", "кошелёк")
+    line("/pay <player> <amount>", "pay another player", "передать гроши")
+    line("/prestige info|raise", "house standing", "положение дома")
+    line("/lang en|ru", "language", "язык")
+    line("/menu", "the menu (F2)", "меню (F2)")
+    SendClientMessage(pid, COLOR_SERVER, ru and "  (админ-команды: /commands admin)" or "  (admin commands: /commands admin)")
+  else
+    if not isAdmin(pid) then
+      say(pid, "только для слуг короны.", "for the crown's servants only.", COLOR_RED)
+      return
+    end
+    SendClientMessage(pid, COLOR_YELLOW, ru and "Команды админа:" or "Admin commands:")
+    line("/npc add <role> <name>", "place a vendor/trainer/guard/quest/civilian", "поставить торговца/учителя/стражника/квест/горожанина")
+    line("/npc list | remove <id>", "manage the placed people", "управлять людьми")
+    line("/station forge|sawbench|mill|oven", "place a craft station", "поставить верстак")
+    line("/arch new <kind> | save <name> | stamp <name> | list | cancel", "blueprints", "чертежи")
+    line("/build", "the architect menu", "меню зодчего")
+    line("/jobsite <id|new> <kind>", "move a work site here", "перенести точку работы сюда")
+    line("/editor", "the game's map editor", "встроенный редактор карты")
+    line("/admin", "the crown's console", "совет короны")
+    line("/kick <player> [reason]", "kick", "кик")
+    line("/ban <player> <minutes> [reason]", "ban", "бан")
+    line("/give <player> <item> [n]", "give an item", "выдать предмет")
+    line("/tp <player>", "travel to a player", "перейти к игроку")
+  end
+end, { help = "list every command (admin: /commands admin)", params = "[admin]" })
+
 RegisterCommand("menu", function(pid)
   open_menu(pid)
 end, { help = "open the command menu" })
@@ -2082,6 +2137,25 @@ function OnPlayerUseMapObject(pid, id)
     local n = nodes[nkey]
     SendClientMessage(pid, COLOR_SERVER, fmt("%s - strike it with a tool.", n.label or "the stone"))
     return
+  end
+end
+
+-- the use key on an NPC: vendors open their shop (the engine does it), the rest
+-- answer here. This is what makes the placed people clickable.
+function OnPlayerInteractActor(pid, id)
+  for _, n in pairs(npcs) do
+    if n.actor == id then
+      if n.role == "trainer" then
+        say(pid, fmt("%s может обучить тебя.", n.name), fmt("%s can train you.", n.name), COLOR_YELLOW)
+      elseif n.role == "guard" then
+        say(pid, "стражник кивает: «Проходи, путник».", "the guard nods: 'Move along, traveller'.", COLOR_YELLOW)
+      elseif n.role == "quest" then
+        say(pid, "«Работы хватает — спроси у бригадиров на промыслах».", "'There is work enough - ask the foremen at the sites'.", COLOR_YELLOW)
+      elseif n.role == "civilian" then
+        say(pid, "горожанин кивает.", "the citizen nods.", COLOR_SERVER)
+      end
+      return
+    end
   end
 end
 
