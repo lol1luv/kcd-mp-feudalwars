@@ -9,6 +9,21 @@ REPO="lol1luv/kcd-mp-feudalwars"
 mkdir -p tmp
 export TMPDIR="$PWD/tmp" TMP="$PWD/tmp" TEMP="$PWD/tmp"
 
+# Level override FIRST (before the update check): Wings sometimes fails to
+# rewrite server.toml from the Startup variable, so enforce it here.
+# LEVEL comes from the egg's Startup tab.
+LEVEL_WANT="${LEVEL:-kutnohorsko}"
+if [ -f server.toml ]; then
+  if grep -qE '^[[:space:]]*level[[:space:]]*=' server.toml; then
+    sed -i -E "s|^[[:space:]]*level[[:space:]]*=.*|level = \"$LEVEL_WANT\"|" server.toml
+  else
+    printf '\n[server]\nlevel = "%s"\n' "$LEVEL_WANT" >> server.toml
+  fi
+  echo "Level enforced: $LEVEL_WANT"
+else
+  echo "WARNING: no server.toml, server will use its own defaults."
+fi
+
 if [ "${AUTO_UPDATE:-1}" != "1" ]; then
   echo "Auto-update off (AUTO_UPDATE=${AUTO_UPDATE:-1}), starting local build."
 else
@@ -53,19 +68,5 @@ else
 fi
 
 export DOTNET_ROOT="$PWD/dotnet" DOTNET_ROOT_X64="$PWD/dotnet"
-
-# Level override: Wings sometimes fails to rewrite server.toml from the Startup
-# variable, so enforce it here. LEVEL comes from the egg's Startup tab.
-LEVEL_WANT="${LEVEL:-kutnohorsko}"
-if [ -f server.toml ]; then
-  if grep -qE '^[[:space:]]*level[[:space:]]*=' server.toml; then
-    sed -i -E "s|^[[:space:]]*level[[:space:]]*=.*|level = \"$LEVEL_WANT\"|" server.toml
-  else
-    printf '\n[server]\nlevel = "%s"\n' "$LEVEL_WANT" >> server.toml
-  fi
-  echo "Level enforced: $LEVEL_WANT"
-else
-  echo "WARNING: no server.toml, server will use its own defaults."
-fi
 
 exec ./KcdMp.Server --config server.toml --gamemode gamemodes/feudalwars.lua
