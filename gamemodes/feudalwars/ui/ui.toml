@@ -1,80 +1,26 @@
-api = 1
-name = "Feudal Wars"
-version = "1"
+[menu]
+file = "menu/index.html"
 
-# The player's own page (/me): name, purse, house, war, the realm's laws and the command list.
-# The mode sends me.show {name, money, house, treasury, prestige, war, rank, admin}; the page sends me.close.
-[frames.me]
-page = "me/index.html"
-preload = true
-z = 310
-focus = "open"
-events_out = ["me.*"]
+[hall]
+file = "hall/index.html"
 
-# The house's hall (/house menu): roster, treasury, wars, prestige. The mode sends
-# house.show {name, house, treasury, prestige, members, wars, admin}; the page sends house.* events.
-[frames.hall]
-page = "hall/index.html"
-preload = true
-z = 320
-focus = "open"
-events_out = ["house.*"]
+[me]
+file = "me/index.html"
 
-# The realm's admin console (/admin ui): online list, live chat feed, kick/ban buttons, treasury edits.
-# The mode sends admin.show {name, admins, players: [{id, name, ping, house, money}], log};
-# the page sends admin.kick {id, reason}, admin.ban {id, reason, minutes}, admin.money {id, amount}, admin.close.
-[frames.admin]
-page = "admin/index.html"
-preload = true
-z = 330
-focus = "open"
-events_out = ["admin.*"]
+[craft]
+file = "craft/index.html"
 
-# A notice in the corner for a moment: earnings, taxes, war news. The mode sends {text}.
-[frames.notice]
-page = "notice/index.html"
-preload = true
-z = 200
+[auction]
+file = "auction/index.html"
 
-# The command menu (F1 or /menu): every command with its description, click to run.
-# The mode sends menu.show {commands: [{cmd, desc}]}; the page sends menu.close, menu.run {cmd}.
-[frames.menu]
-page = "menu/index.html"
-preload = true
-z = 300
-focus = "open"
-events_out = ["menu.*"]
+[build]
+file = "build/index.html"
 
-# The auction: lots of resources, your bag, sell and buy without the chat.
-# The mode sends auction.show {lots, bag, money, lang}; the page sends auction.* events.
-[frames.auction]
-page = "auction/index.html"
-preload = true
-z = 315
-focus = "open"
-events_out = ["auction.*"]
+[npc]
+file = "npc/index.html"
 
-# The builder (admins): the catalogue of ready structures with a preview.
-# The mode sends build.show {structures, lang}; the page sends build.* events.
-[frames.build]
-page = "build/index.html"
-preload = true
-z = 315
-focus = "open"
-events_out = ["build.*"]
+[admin]
+file = "admin/index.html"
 
-# The NPC constructor (admins): people of the realm, their roles and stock.
-[frames.npc]
-page = "npc/index.html"
-preload = true
-z = 318
-focus = "open"
-events_out = ["npc.*"]
-
-# The workshop: the production chain (ore->ingot->goods) at a station.
-[frames.craft]
-page = "craft/index.html"
-preload = true
-z = 316
-focus = "open"
-events_out = ["craft.*"]
+[notice]
+file = "notice/index.html"

@@ -1,327 +1,622 @@
-/* Feudal Wars UI — parchment, wax and iron. One look for every frame.
-   Textures are pure CSS (no image files): layered gradients make the parchment
-   grain, the wax seal and the iron banding. */
+/* ==========================================================================
+   FEUDAL WARS v5 — Dark Fantasy Gothic Parchment & Letters
+   Compact translucent parchment scrolls with 3D wax seals & gold accents
+   ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Philosopher:ital,wght@0,400;0,700;1,400&display=swap');
 
 :root {
-  --ink: #23190e;
-  --ink-heading: #170f07;
-  --ink-soft: #594736;
-  --ink-muted: #7e6953;
-  --parch: #ebdcb9;
-  --parch-2: #f7ede0;
-  --parch-3: #d8c397;
-  --parch-edge: #b59e6c;
-  --gold: #d4af37;
-  --gold-hi: #fce895;
+  /* Semi-transparent Backdrop Overlay */
+  --bg-backdrop: rgba(8, 6, 4, 0.55);
+  
+  /* Translucent Aged Parchment Scroll */
+  --parchment-bg: rgba(244, 233, 210, 0.88);
+  --parchment-mid: rgba(230, 215, 185, 0.90);
+  --parchment-dark: rgba(212, 192, 150, 0.94);
+  --parchment-edge: #b09968;
+  
+  --ink-primary: #21160c;
+  --ink-heading: #140c05;
+  --ink-muted: #5e4c3a;
+  
+  /* Imperial Gold Accent */
+  --gold-bright: #fce895;
+  --gold-mid: #d4af37;
   --gold-deep: #8c6a1d;
   --gold-dark: #4f3b0e;
-  --gold-glow: rgba(212, 175, 55, 0.4);
-  --blood: #8c1c1c;
-  --blood-hi: #d13838;
-  --blood-dark: #4e0f0f;
-  --iron: #12100d;
-  --iron-2: #24201b;
-  --iron-3: #443c35;
-  --line: #b59e6c;
+  --gold-glow: rgba(212, 175, 55, 0.35);
+  
+  /* Royal Crimson Wax Seal */
+  --wax-bright: #d13232;
+  --wax-mid: #8f1717;
+  --wax-dark: #4d0b0b;
+  --wax-shadow: rgba(143, 23, 23, 0.45);
+  
+  /* Gothic Dark Iron Framing */
+  --iron-light: rgba(50, 42, 34, 0.90);
+  --iron-mid: rgba(28, 22, 16, 0.95);
+  --iron-dark: rgba(12, 9, 6, 0.98);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-html, body { height: 100%; width: 100%; overflow: hidden; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
-  font-family: "Philosopher", "Georgia", "Palatino Linotype", serif;
-  color: var(--ink);
-  background: rgba(10, 8, 5, 0.82);
+  font-family: 'Philosopher', 'Georgia', serif;
+  color: var(--ink-primary);
+  background: var(--bg-backdrop);
   display: none;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
+
 body.ready {
   display: flex;
-  animation: uiAppear 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: letterUnfold 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes uiAppear {
-  from { opacity: 0; transform: scale(0.97) translateY(4px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+@keyframes letterUnfold {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
-/* ---------- parchment surface ---------- */
+/* --------------------------------------------------------------------------
+   Compact Window Container (Does NOT block full screen!)
+   -------------------------------------------------------------------------- */
 .parchment {
-  background-color: var(--parch);
-  background-image:
-    radial-gradient(ellipse 90% 70% at 10% 10%, rgba(247, 237, 224, 0.85), transparent 75%),
-    radial-gradient(ellipse 70% 80% at 90% 90%, rgba(181, 158, 108, 0.35), transparent 70%),
-    radial-gradient(circle at 50% 50%, rgba(100, 70, 30, 0.04) 0 3px, transparent 4px),
-    linear-gradient(135deg, var(--parch-2) 0%, var(--parch) 50%, var(--parch-3) 100%);
-  background-size: auto, auto, 120px 120px, auto;
+  background: linear-gradient(140deg, rgba(247, 237, 218, 0.90) 0%, rgba(228, 212, 178, 0.86) 100%);
+  backdrop-filter: blur(10px);
 }
 
-/* ---------- generic window ---------- */
 .window {
-  width: min(900px, 94vw);
-  max-height: 88vh;
+  width: min(650px, 86vw);
+  max-height: 76vh;
   display: flex;
   flex-direction: column;
   position: relative;
-  border-radius: 6px;
-  border: 2px solid var(--gold);
+  border-radius: 8px;
+  border: 2px solid var(--gold-mid);
   box-shadow:
-    0 0 0 1px var(--iron),
-    0 0 0 4px var(--iron-2),
-    0 0 0 6px var(--gold-dark),
-    0 24px 75px rgba(0, 0, 0, 0.9),
-    0 0 35px var(--gold-glow);
+    0 0 0 1px var(--iron-dark),
+    0 0 0 3px var(--iron-mid),
+    0 0 0 5px var(--gold-deep),
+    0 16px 45px rgba(0, 0, 0, 0.85),
+    0 0 25px var(--gold-glow);
   overflow: hidden;
 }
+
 .window::before {
-  content: "";
-  position: absolute; inset: 0;
+  content: '';
+  position: absolute;
+  inset: 0;
   pointer-events: none;
-  box-shadow: inset 0 0 55px rgba(70, 45, 15, 0.35), inset 0 0 10px rgba(40, 25, 5, 0.5);
+  box-shadow: inset 0 0 40px rgba(70, 45, 15, 0.28), inset 0 0 8px rgba(40, 25, 5, 0.4);
   z-index: 10;
-  border-radius: 4px;
+  border-radius: 6px;
 }
-.window.wide { width: min(1080px, 96vw); }
+
+.window.wide {
+  width: min(780px, 90vw);
+}
+
+/* --------------------------------------------------------------------------
+   Header & Wax Seal Accent
+   -------------------------------------------------------------------------- */
 .window > header {
-  display: flex; align-items: center; gap: 16px;
-  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%),
-    linear-gradient(180deg, var(--iron-3) 0%, var(--iron-2) 55%, var(--iron) 100%);
-  border-bottom: 2px solid var(--gold);
+    linear-gradient(180deg, var(--iron-light) 0%, var(--iron-mid) 60%, var(--iron-dark) 100%);
+  border-bottom: 2px solid var(--gold-mid);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
   position: relative;
   z-index: 2;
 }
+
 .window h1 {
-  font-family: "Cinzel", serif;
-  font-size: 21px; font-weight: 700; letter-spacing: 3px;
+  font-family: 'Cinzel', serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
   text-transform: uppercase;
-  color: var(--gold-hi); margin-right: auto;
-  text-shadow: 0 2px 4px #000, 0 0 14px rgba(212, 175, 55, 0.5);
-}
-.crest {
-  width: 44px; height: 44px; flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px; color: var(--gold-hi);
-  background:
-    radial-gradient(circle at 35% 30%, var(--blood-hi) 0%, var(--blood) 65%, var(--blood-dark) 100%);
-  border: 2px solid var(--gold);
-  border-radius: 50%;
-  box-shadow: 0 0 14px rgba(212, 175, 55, 0.6), inset 0 -3px 6px rgba(0,0,0,.6);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.crest:hover {
-  transform: scale(1.06) rotate(4deg);
-  box-shadow: 0 0 22px rgba(252, 232, 149, 0.85), inset 0 -3px 6px rgba(0,0,0,.6);
-}
-.crest.big { width: 64px; height: 64px; font-size: 32px; margin: 6px auto 14px; }
-#body { padding: 24px 28px; overflow-y: auto; position: relative; z-index: 1; }
-footer {
-  padding: 12px 22px; text-align: center;
-  font-family: "Cinzel", serif;
-  font-size: 11.5px; letter-spacing: 2px; text-transform: uppercase;
-  color: var(--ink-soft);
-  border-top: 1px solid var(--parch-edge);
-  background: linear-gradient(180deg, rgba(181, 158, 108, 0.05), rgba(181, 158, 108, 0.18));
+  color: var(--gold-bright);
+  margin-right: auto;
+  text-shadow: 0 2px 4px #000, 0 0 10px rgba(212, 175, 55, 0.5);
 }
 
-/* ---------- two-pane shell (menu) ---------- */
-.shell {
-  width: min(1040px, 95vw);
-  height: min(690px, 88vh);
-  display: grid; grid-template-columns: 240px 1fr;
-  border-radius: 6px;
-  border: 2px solid var(--gold);
+/* 3D Crimson Wax Seal (.crest) */
+.crest {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--gold-bright);
+  background: radial-gradient(circle at 35% 30%, var(--wax-bright) 0%, var(--wax-mid) 65%, var(--wax-dark) 100%);
+  border: 2px solid var(--gold-mid);
+  border-radius: 50%;
   box-shadow:
-    0 0 0 1px var(--iron),
-    0 0 0 4px var(--iron-2),
-    0 0 0 6px var(--gold-dark),
-    0 24px 75px rgba(0, 0, 0, 0.9),
-    0 0 35px var(--gold-glow);
+    0 4px 10px var(--wax-shadow),
+    0 0 14px rgba(212, 175, 55, 0.5),
+    inset 0 -3px 6px rgba(0,0,0,0.65),
+    inset 0 3px 6px rgba(255,255,255,0.3);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  position: relative;
+}
+
+.crest::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px dashed rgba(212, 175, 55, 0.45);
+  pointer-events: none;
+}
+
+.crest:hover {
+  transform: scale(1.08) rotate(5deg);
+  box-shadow: 0 0 22px rgba(252, 232, 149, 0.85), inset 0 -3px 6px rgba(0,0,0,0.65);
+}
+
+.crest.big {
+  width: 58px;
+  height: 58px;
+  font-size: 28px;
+  margin: 4px auto 12px;
+}
+
+#body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+}
+
+footer {
+  padding: 10px 18px;
+  text-align: center;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  border-top: 1px solid var(--parchment-edge);
+  background: rgba(181, 158, 108, 0.12);
+}
+
+/* --------------------------------------------------------------------------
+   Two-Pane Compact Shell (Main Menu)
+   -------------------------------------------------------------------------- */
+.shell {
+  width: min(780px, 90vw);
+  height: min(540px, 76vh);
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  border-radius: 8px;
+  border: 2px solid var(--gold-mid);
+  box-shadow:
+    0 0 0 1px var(--iron-dark),
+    0 0 0 3px var(--iron-mid),
+    0 0 0 5px var(--gold-deep),
+    0 18px 50px rgba(0, 0, 0, 0.88),
+    0 0 30px var(--gold-glow);
   overflow: hidden;
   position: relative;
 }
+
 .rail {
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%),
-    linear-gradient(180deg, var(--iron-3) 0%, var(--iron-2) 60%, var(--iron) 100%);
-  border-right: 2px solid var(--gold);
-  padding: 20px 14px;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%),
+    linear-gradient(180deg, var(--iron-light) 0%, var(--iron-mid) 60%, var(--iron-dark) 100%);
+  border-right: 2px solid var(--gold-mid);
+  padding: 16px 12px;
   text-align: center;
   position: relative;
   z-index: 2;
   box-shadow: 4px 0 15px rgba(0, 0, 0, 0.55);
 }
+
 .rail-title {
-  font-family: "Cinzel", serif;
-  font-size: 17px; font-weight: 700; letter-spacing: 2px;
+  font-family: 'Cinzel', serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--gold-hi); margin-bottom: 22px; line-height: 1.3;
+  color: var(--gold-bright);
+  margin-bottom: 16px;
+  line-height: 1.25;
   text-shadow: 0 2px 4px #000, 0 0 10px rgba(212, 175, 55, 0.4);
 }
-.rail-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
-.rail-nav button {
-  font-family: "Philosopher", serif; font-size: 15px; text-align: left;
-  padding: 11px 16px; border-radius: 4px; cursor: pointer;
-  color: #e2d5ba; background: transparent;
-  border: 1px solid transparent; border-left: 3px solid transparent;
-  transition: all 0.18s ease; position: relative;
+
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
 }
+
+.rail-nav button {
+  font-family: 'Philosopher', serif;
+  font-size: 14px;
+  text-align: left;
+  padding: 9px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #e2d5ba;
+  background: transparent;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  transition: all 0.16s ease;
+}
+
 .rail-nav button:hover {
   background: rgba(212, 175, 55, 0.15);
-  color: var(--gold-hi); border-color: rgba(212, 175, 55, 0.3);
-  padding-left: 20px;
+  color: var(--gold-bright);
+  border-color: rgba(212, 175, 55, 0.3);
+  padding-left: 17px;
 }
+
 .rail-nav button.on {
-  background: linear-gradient(90deg, rgba(212, 175, 55, 0.32), rgba(212, 175, 55, 0.06));
-  color: var(--gold-hi); border-left-color: var(--gold-hi); font-weight: 700;
-  box-shadow: inset 0 0 12px rgba(212, 175, 55, 0.2);
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.32), rgba(212, 175, 55, 0.05));
+  color: var(--gold-bright);
+  border-left-color: var(--gold-bright);
+  font-weight: 700;
+  box-shadow: inset 0 0 10px rgba(212, 175, 55, 0.2);
 }
+
 .rail-foot {
-  display: flex; align-items: center; gap: 8px;
-  margin-top: 14px; padding-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid rgba(212, 175, 55, 0.25);
 }
+
 .rail-foot .act { flex: 1; }
-.pane { display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative; z-index: 1; }
-.pane-head {
-  padding: 20px 30px 14px;
-  border-bottom: 2px solid var(--parch-edge);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0));
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
+
+.pane-head {
+  padding: 16px 22px 10px;
+  border-bottom: 1.5px solid var(--parchment-edge);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+}
+
 .pane-head h1 {
-  font-family: "Cinzel", serif;
-  font-size: 23px; letter-spacing: 2px; text-transform: uppercase; color: var(--blood);
+  font-family: 'Cinzel', serif;
+  font-size: 20px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--wax-mid);
   text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
 }
-.pane-body { padding: 24px 30px; overflow-y: auto; flex: 1; }
 
-/* ---------- cards ---------- */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.pane-body {
+  padding: 18px 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Cards Grid & Interactive Tiles
+   -------------------------------------------------------------------------- */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
 .card {
-  display: flex; flex-direction: column; gap: 6px; text-align: left;
-  font: inherit; cursor: pointer;
-  padding: 15px 18px; border-radius: 5px;
-  background: linear-gradient(180deg, #faf3e4 0%, #ece0c3 100%);
-  border: 1px solid var(--parch-edge); border-left: 4px solid var(--gold);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 3px 8px rgba(0, 0, 0, 0.12);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative; overflow: hidden;
-}
-.card::after {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 60%);
-  pointer-events: none;
-}
-.card:hover {
-  transform: translateY(-3px);
-  border-left-color: var(--blood-hi); border-color: var(--gold);
-  box-shadow: 0 2px 0 rgba(255, 255, 255, 0.8) inset, 0 8px 18px rgba(0, 0, 0, 0.2);
-}
-.card-t { font-family: "Cinzel", serif; font-size: 16px; font-weight: 700; color: var(--ink-heading); }
-.card-d { font-size: 13.5px; color: var(--ink-soft); line-height: 1.4; }
-.hint {
-  margin-top: 18px; font-size: 13px; color: var(--ink-soft); font-style: italic;
-  display: flex; align-items: center; gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  padding: 12px 15px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, rgba(253, 248, 235, 0.95) 0%, rgba(240, 227, 200, 0.9) 100%);
+  border: 1px solid var(--parchment-edge);
+  border-left: 4px solid var(--gold-mid);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 3px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.18s ease;
+  position: relative;
 }
 
-/* ---------- buttons ---------- */
+.card:hover {
+  transform: translateY(-2px);
+  border-left-color: var(--wax-bright);
+  border-color: var(--gold-mid);
+  box-shadow: 0 2px 0 rgba(255, 255, 255, 0.8) inset, 0 6px 14px rgba(0, 0, 0, 0.18);
+}
+
+.card-t {
+  font-family: 'Cinzel', serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink-heading);
+}
+
+.card-d {
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  line-height: 1.35;
+}
+
+.hint {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons Style
+   -------------------------------------------------------------------------- */
 button.act {
-  font-family: "Cinzel", serif; font-size: 13.5px; font-weight: 700; letter-spacing: 1px;
-  padding: 9px 18px; cursor: pointer;
-  color: var(--parch-2);
-  background: linear-gradient(180deg, var(--iron-3) 0%, var(--iron-2) 50%, var(--iron) 100%);
-  border: 1px solid var(--gold-dark); border-radius: 4px;
+  font-family: 'Cinzel', serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #f7ede0;
+  background: linear-gradient(180deg, var(--iron-light) 0%, var(--iron-mid) 50%, var(--iron-dark) 100%);
+  border: 1px solid var(--gold-deep);
+  border-radius: 4px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 0 3px 6px rgba(0, 0, 0, 0.4);
-  transition: all 0.18s ease;
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: all 0.16s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   text-shadow: 0 1px 2px #000;
 }
+
 button.act:hover {
-  background: linear-gradient(180deg, var(--blood-hi) 0%, var(--blood) 60%, var(--blood-dark) 100%);
-  border-color: var(--gold-hi); color: #fff;
-  box-shadow: 0 0 12px rgba(209, 56, 56, 0.55), 0 3px 6px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, var(--wax-bright) 0%, var(--wax-mid) 60%, var(--wax-dark) 100%);
+  border-color: var(--gold-bright);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(209, 50, 50, 0.55), 0 3px 6px rgba(0, 0, 0, 0.4);
   transform: translateY(-1px);
 }
+
 button.act.gold {
   color: #271d05;
-  background: linear-gradient(180deg, var(--gold-hi) 0%, var(--gold) 70%, var(--gold-deep) 100%);
-  border-color: var(--gold-hi); font-weight: 700;
+  background: linear-gradient(180deg, var(--gold-bright) 0%, var(--gold-mid) 70%, var(--gold-deep) 100%);
+  border-color: var(--gold-bright);
+  font-weight: 700;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
+
 button.act.gold:hover {
-  background: linear-gradient(180deg, #fff2b8 0%, var(--gold-hi) 70%, var(--gold) 100%);
-  box-shadow: 0 0 16px rgba(252, 232, 149, 0.75), 0 3px 6px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, #fff2b8 0%, var(--gold-bright) 70%, var(--gold-mid) 100%);
+  box-shadow: 0 0 14px rgba(252, 232, 149, 0.75), 0 3px 6px rgba(0, 0, 0, 0.4);
 }
-button.act.big { font-size: 15px; padding: 12px 24px; letter-spacing: 1.5px; }
-button.act.small { font-size: 11px; padding: 5px 12px; }
+
+button.act.big {
+  font-size: 14px;
+  padding: 10px 20px;
+  letter-spacing: 1.2px;
+}
+
+button.act.small {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
 button.close {
-  font-size: 24px; line-height: 1; padding: 2px 10px;
-  color: var(--gold); background: transparent; border: none; cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  padding: 2px 8px;
+  color: var(--gold-mid);
+  background: transparent;
+  border: none;
+  cursor: pointer;
   transition: color 0.15s ease, transform 0.15s ease;
 }
-button.close:hover { color: var(--blood-hi); transform: scale(1.15); }
 
-/* ---------- tables, dl, misc ---------- */
-table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin-top: 8px; }
-th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--parch-edge); vertical-align: middle; }
+button.close:hover {
+  color: var(--wax-bright);
+  transform: scale(1.15);
+}
+
+/* --------------------------------------------------------------------------
+   Tables, Lists & Decorative Details
+   -------------------------------------------------------------------------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin-top: 6px;
+}
+
+th, td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--parchment-edge);
+  vertical-align: middle;
+}
+
 th {
-  font-family: "Cinzel", serif; color: var(--blood); letter-spacing: 1.5px; font-size: 13px; font-weight: 700;
-  border-bottom: 2px solid var(--gold); background: rgba(212, 175, 55, 0.08);
+  font-family: 'Cinzel', serif;
+  color: var(--wax-mid);
+  letter-spacing: 1.2px;
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 2px solid var(--gold-mid);
+  background: rgba(212, 175, 55, 0.08);
 }
-tbody tr { transition: background 0.12s ease; }
-tbody tr:hover td { background: rgba(212, 175, 55, 0.16); }
-dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; align-items: center; }
-dt { font-family: "Cinzel", serif; font-weight: 700; color: var(--blood); font-size: 14px; }
-dd { border-bottom: 1px dotted var(--parch-edge); padding-bottom: 6px; font-size: 14.5px; }
+
+tbody tr:hover td {
+  background: rgba(212, 175, 55, 0.15);
+}
+
+dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  align-items: center;
+}
+
+dt {
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  color: var(--wax-mid);
+  font-size: 13.5px;
+}
+
+dd {
+  border-bottom: 1px dotted var(--parchment-edge);
+  padding-bottom: 4px;
+  font-size: 13.5px;
+}
+
 .badge {
-  display: inline-block; padding: 3px 12px; border-radius: 12px;
-  font-family: "Cinzel", serif; font-size: 11px; font-weight: 700; letter-spacing: 1px;
-  background: var(--gold); color: #1a1204; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-family: 'Cinzel', serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: var(--gold-mid);
+  color: #1a1204;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
-.badge.war { background: var(--blood); color: var(--parch-2); }
+
+.badge.war {
+  background: var(--wax-mid);
+  color: #f7ede0;
+}
+
 .seal-line {
-  text-align: center; margin-bottom: 16px; padding: 10px;
-  border-top: 1px solid var(--parch-edge); border-bottom: 1px solid var(--parch-edge);
+  text-align: center;
+  margin-bottom: 14px;
+  padding: 8px;
+  border-top: 1px solid var(--parchment-edge);
+  border-bottom: 1px solid var(--parchment-edge);
   background: rgba(212, 175, 55, 0.05);
 }
+
 .seal-line span {
-  font-family: "Cinzel", serif; font-size: 21px; font-weight: 700; letter-spacing: 4px;
-  text-transform: uppercase; color: var(--blood);
+  font-family: 'Cinzel', serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--wax-mid);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
 }
-.lead { font-size: 14px; color: var(--ink-soft); font-style: italic; line-height: 1.5; }
-.pane-head .lead { margin-top: 6px; }
-input[type="text"], input[type="number"], select {
-  font-family: "Philosopher", serif; font-size: 14.5px; padding: 8px 12px;
-  border: 1px solid var(--parch-edge); border-radius: 4px;
-  background: #fdfaf2; color: var(--ink-heading);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.08);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+.lead {
+  font-size: 13px;
+  color: var(--ink-muted);
+  font-style: italic;
+  line-height: 1.45;
 }
+
+.pane-head .lead {
+  margin-top: 4px;
+}
+
+input[type='text'], input[type='number'], select {
+  font-family: 'Philosopher', serif;
+  font-size: 13.5px;
+  padding: 7px 11px;
+  border: 1px solid var(--parchment-edge);
+  border-radius: 4px;
+  background: #fdfaf2;
+  color: var(--ink-heading);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.08);
+  transition: border-color 0.15s ease;
+}
+
 input:focus, select:focus {
-  outline: none; border-color: var(--gold);
+  outline: none;
+  border-color: var(--gold-mid);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.08), 0 0 8px var(--gold-glow);
 }
+
 #log {
-  height: 180px; overflow-y: auto; font-size: 13.5px; line-height: 1.6;
-  background: rgba(30, 22, 12, 0.06); border: 1px solid var(--parch-edge); border-radius: 4px; padding: 10px 14px;
+  height: 160px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  background: rgba(30, 22, 12, 0.06);
+  border: 1px solid var(--parchment-edge);
+  border-radius: 4px;
+  padding: 8px 12px;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.1);
 }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: rgba(50, 35, 15, 0.1); border-radius: 4px; }
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(50, 35, 15, 0.1);
+  border-radius: 4px;
+}
+
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
-  border-radius: 5px; border: 2px solid transparent; background-clip: padding-box;
+  background: linear-gradient(180deg, var(--gold-mid), var(--gold-deep));
+  border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--blood); background-clip: padding-box; }
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--wax-mid);
+}
+
 h2 {
-  font-family: "Cinzel", serif; font-size: 18px; letter-spacing: 1.5px; text-transform: uppercase;
-  color: var(--blood); margin: 0 0 10px;
+  font-family: 'Cinzel', serif;
+  font-size: 16px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--wax-mid);
+  margin: 0 0 8px;
 }
-.hero-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+
+.hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
