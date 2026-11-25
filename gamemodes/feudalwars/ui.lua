@@ -136,6 +136,15 @@ FW.register_commands = function()
     FW.say_raw(pid, FW.fmt("%s: %s groschen", FW.t(pid, "purse"), FW.grosch(FW.purse(pid))), COLOR_SERVER)
   end, { help = "count your groschen" })
 
+  cmd("kit", function(pid)
+    local lang = FW.lang_of(pid)
+    if lang == "ru" then
+      FW.say_raw(pid, "Тебе не нужен особый инвентарь: любое оружие или инструмент в руках подходят! Встань у жилы/дерева/посевов и бей.", COLOR_YELLOW)
+    else
+      FW.say_raw(pid, "You need no special items: any weapon or tool in your hands works! Stand near a node/tree/crop and swing.", COLOR_YELLOW)
+    end
+  end, { help = "tool instructions" })
+
   cmd("pay", function(pid, args)
     local target, amount = sscanf(args, "ud")
     if target == false or target == nil or amount == false or amount == nil then
@@ -372,6 +381,9 @@ FW.register_commands = function()
       if world.zone_remove(rest:match("^(%S*)") or "") then
         FW.say_raw(pid, "work place removed.", COLOR_SERVER)
       end
+    elseif verb == "reset" then
+      world.zone_setup_default()
+      FW.say_raw(pid, "All work places reset to out-of-castle natural locations.", COLOR_YELLOW)
     else
       for _, zone in ipairs(world.zone_all()) do
         local def = FW.TRADE[zone.trade]
@@ -457,7 +469,9 @@ function FW.web_event(pid, name, data)
     return true
   end
 
-  if name == "menu.cursor" then
+  if name == "menu.ready" or name == "menu.open" then
+    FW.menu_panel(pid)
+  elseif name == "menu.cursor" then
     SetPlayerCursor(pid, true)
     SetPlayerWebFocus(pid, "menu", true, true)
   elseif name == "menu.close" then FW.close_frame(pid, "menu")

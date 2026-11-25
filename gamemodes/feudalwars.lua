@@ -49,20 +49,14 @@ function OnGameModeInit()
 
   AddSpawnPoint(FW.spawn.x, FW.spawn.y, FW.spawn.z, FW.spawn.yaw, "town")
 
-  -- the realm's own trades, if the crown has not placed any yet: a small ring of work
-  -- places around the spawn. Admins move them to their true homes with /zone here.
-  if next(FW.state.sites) == nil then
-    local plan = {
-      { trade = "quarry", dx = 22, dy = 14 },
-      { trade = "woods", dx = -24, dy = 16 },
-      { trade = "fields", dx = -14, dy = -22 },
-      { trade = "hunt", dx = 26, dy = -18 },
-      { trade = "workshop", dx = 8, dy = 8 },
-    }
-    for _, p in ipairs(plan) do
-      FW.zone_add(p.trade, FW.spawn.x + p.dx, FW.spawn.y + p.dy, FW.spawn.z, nil)
-    end
-    FW.log("no work places saved: raised the default ring around the spawn")
+  -- if any old sites were placed inside the spawn/castle courtyard, reset them to proper out-of-castle locations
+  local legacy = false
+  for id in pairs(FW.state.sites) do
+    if id:find("quarry_60_14", 1, true) or id:find("woods_-64_16", 1, true) then legacy = true break end
+  end
+  if legacy then
+    FW.log("detected legacy in-castle work zones: resetting to natural out-of-castle locations")
+    FW.zone_setup_default()
   end
 
   -- the game's own stations wait for the mode: only inside a workshop or quarry
@@ -115,7 +109,7 @@ function OnPlayerSpawn(pid)
 end
 
 function OnPlayerDeath(pid, attacker)
-  if attacker and attacker >= 0 then FW.war_score(pid, attacker) end
+  if attacker and attacker >= 0 and IsPlayerConnected(attacker) then FW.war_score(pid, attacker) end
 end
 
 function OnPlayerDisconnect(pid, reason)

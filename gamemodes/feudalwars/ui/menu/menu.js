@@ -107,4 +107,5 @@
   $("open-build").addEventListener("click", () => KcdMp.emitServer("menu.run", { action: "build" }));
   $("lang-en").addEventListener("click", () => KcdMp.emitServer("menu.lang", { lang: "en" }));
   $("lang-ru").addEventListener("click", () => KcdMp.emitServer("menu.lang", { lang: "ru" }));
+  KcdMp.emitServer("menu.ready");
 })();

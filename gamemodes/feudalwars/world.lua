@@ -154,9 +154,57 @@ function FW.zone_remove(id)
   return true
 end
 
+FW.LEVEL_PRESETS = {
+  kutnohorsko = {
+    { trade = "workshop", dx = 35.0,  dy = -60.0, label = "Ремесленная слобода" },
+    { trade = "woods",    dx = -220.0, dy = 100.0, label = "Сухдольский лес" },
+    { trade = "fields",   dx = 180.0,  dy = 120.0, label = "Сухдольские поля" },
+    { trade = "quarry",   dx = 140.0,  dy = -230.0, label = "Каменоломня у скал" },
+    { trade = "hunt",     dx = -100.0, dy = 370.0, label = "Заповедная чаща" },
+  },
+  klaster = {
+    { trade = "workshop", dx = 40.0,  dy = -38.0, label = "Монастырская слобода" },
+    { trade = "woods",    dx = -130.0, dy = 160.0, label = "Заречный лес" },
+    { trade = "fields",   dx = -180.0, dy = -140.0, label = "Подмонастырские поля" },
+    { trade = "quarry",   dx = 120.0,  dy = 62.0,  label = "Монастырский карьер" },
+    { trade = "hunt",     dx = 220.0,  dy = -240.0, label = "Лесные угодья" },
+  },
+  trosecko = {
+    { trade = "workshop", dx = 36.0,  dy = -35.0, label = "Подзамочная кузня" },
+    { trade = "woods",    dx = -190.0, dy = 135.0, label = "Тросецкий бор" },
+    { trade = "fields",   dx = -90.0,  dy = -215.0, label = "Деревенские нивы" },
+    { trade = "quarry",   dx = 156.0,  dy = -165.0, label = "Скальный развал" },
+    { trade = "hunt",     dx = -340.0, dy = 185.0, label = "Угодья у скал" },
+  },
+}
+
+function FW.zone_clear_all()
+  for id, zone in pairs(FW.state.sites) do
+    if zone.area then pcall(DeleteArea, zone.area_name) end
+    if zone.icon then pcall(DeleteMapIcon, zone.icon) end
+    if zone.actor then pcall(DestroyEntity, zone.actor) end
+  end
+  FW.state.sites = {}
+  FW.x("DELETE FROM fw_sites")
+end
+
+function FW.zone_setup_default()
+  FW.zone_clear_all()
+  local level = tostring(GetLevel() or ""):lower()
+  local preset = FW.LEVEL_PRESETS[level] or FW.LEVEL_PRESETS.kutnohorsko
+  for _, p in ipairs(preset) do
+    local z = FW.ground(FW.spawn.x + p.dx, FW.spawn.y + p.dy, FW.spawn.z)
+    FW.zone_add(p.trade, FW.spawn.x + p.dx, FW.spawn.y + p.dy, z, p.label, p.trade)
+  end
+  FW.log("zones reset to realm defaults for level '%s'", level)
+end
+
 function FW.zone_load_all()
   local rows = FW.qs("SELECT id, trade, x, y, z, label FROM fw_sites")
-  if not rows then return end
+  if not rows or #rows == 0 then
+    FW.zone_setup_default()
+    return
+  end
   for _, r in ipairs(rows) do
     local zone = {
       id = r.id, trade = r.trade, x = r.x, y = r.y, z = r.z, label = r.label or "",
@@ -165,7 +213,7 @@ function FW.zone_load_all()
     FW.state.sites[r.id] = zone
     FW.zone_draw(zone)
   end
-  FW.log("zones: %d placed by the crown", #rows)
+  FW.log("zones: %d loaded from storage", #rows)
 end
 
 -- ---------------------------------------------------------------- what a strike hit

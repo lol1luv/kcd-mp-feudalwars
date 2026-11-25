@@ -18,10 +18,9 @@ function FW.work_on_hit(pid, hit)
   if now < ready then return end
   FW.state.work_cd[pid] = now + FW.CONFIG.work_cooldown_ms
 
-  local trade = world.hit_trade(hit)
-  if not trade then return end
   local zone = world.zone_at(hit.x, hit.y, hit.z)
-  if zone and zone.trade ~= trade then trade = zone.trade end
+  local trade = zone and zone.trade or world.hit_trade(hit)
+  if not trade then return end
   local def = FW.TRADE[trade]
   if not def then return end
 
@@ -98,8 +97,9 @@ function FW.hunt_spawn(zone)
     local r = 12 + math.random() * (zone.radius or 40) * 0.6
     local ax = zone.x + math.cos(ang) * r
     local ay = zone.y + math.sin(ang) * r
+    local az = FW.ground(ax, ay, zone.z)
     local kind = kinds[math.random(#kinds)]
-    local id = CreateAnimal(kind, ax, ay, -1, math.random(0, 359), nil, nil)
+    local id = CreateAnimal(kind, ax, ay, az, math.random(0, 359), nil, nil)
     if id then
       zone.animals[#zone.animals + 1] = id
       FW.state.animals[id] = { zone = zone.id, kind = kind }

@@ -1,6 +1,6 @@
-# KCD:MP Feudal Wars Server
+# KCD:MP Feudal Wars Server (v4)
 
-A custom KCD:MP game mode with feudal houses, wars, and economy system.
+A custom role-play realm for Kingdom Come: Deliverance Multiplayer (KCD:MP) with feudal houses, wars, an economy based on real physical strikes & trades, interactive NPCs, and a custom web-based UI.
 
 ## Features
 
