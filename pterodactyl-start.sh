@@ -22,7 +22,7 @@ export TMPDIR="$PWD/tmp" TMP="$PWD/tmp" TEMP="$PWD/tmp"
 
 # ---------------------------------------------------------------- server.toml
 
-# Level override FIRST (before the sync): Wings sometimes fails to rewrite
+# Level & gamemode override FIRST (before the sync): Wings sometimes fails to rewrite
 # server.toml from the Startup variable, so enforce it here.
 LEVEL_WANT="${LEVEL:-kutnohorsko}"
 say "level: env LEVEL='${LEVEL:-<unset>}' -> want '$LEVEL_WANT'"
@@ -32,7 +32,12 @@ if [ -f server.toml ]; then
   else
     printf '\n[server]\nlevel = "%s"\n' "$LEVEL_WANT" >> server.toml
   fi
-  say "level: server.toml now $(grep -E '^[[:space:]]*level[[:space:]]*=' server.toml | head -1 | tr -d '\r')"
+  if grep -qE '^[[:space:]]*script[[:space:]]*=' server.toml; then
+    sed -i -E 's|^[[:space:]]*script[[:space:]]*=.*|script = "gamemodes/feudalwars.lua"|' server.toml
+  else
+    printf '\n[gamemode]\nscript = "gamemodes/feudalwars.lua"\n' >> server.toml
+  fi
+  say "server.toml configured for gamemodes/feudalwars.lua"
 else
   warn "no server.toml, the server will use its own defaults"
 fi
