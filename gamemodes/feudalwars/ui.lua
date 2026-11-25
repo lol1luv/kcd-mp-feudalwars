@@ -92,6 +92,23 @@ function FW.ui.register_commands()
     if SendChatMessage then SendChatMessage(pid, FW.t(pid, "kit_desc")) end
   end, { help = "Tool guide" })
 
+  -- Вход в админку по паролю (/adminpass <пароль>)
+  RegisterCommand("adminpass", function(pid, args)
+    local pass = type(args) == "string" and args or (type(args) == "table" and args[1] or "")
+    if pass == "admin" or pass == "admin123" then
+      if SetPlayerAdmin then SetPlayerAdmin(pid, true) end
+      local pdata = FW.state.players[pid]
+      if pdata then pdata.is_admin = true end
+      if SendChatMessage then
+        SendChatMessage(pid, "[Feudal Wars] Вы получили права администратора!")
+      end
+    else
+      if SendChatMessage then
+        SendChatMessage(pid, "[Feudal Wars] Использование: /adminpass <пароль>")
+      end
+    end
+  end, { help = "Авторизация админа: /adminpass <пароль>" })
+
   RegisterCommand("commands", function(pid)
     if SendChatMessage then
       SendChatMessage(pid, "=== Feudal Wars Commands ===")
