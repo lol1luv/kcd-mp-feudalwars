@@ -1,55 +1,54 @@
 -- ============================================================================
--- Feudal Wars v5 — Database Abstraction Layer (DAL)
+-- Feudal Wars v5 — Native Database Layer
 -- ============================================================================
 
 local FW = require("feudalwars.core")
 
 FW.db = {}
-
-function FW.db.x(sql, ...)
-  if not ExecuteSql then return false end
-  local query = FW.fmt(sql, ...)
-  local ok, res = pcall(ExecuteSql, query)
-  if not ok then FW.err("SQL exec failed: %s", tostring(res)) end
-  return ok
-end
-
-function FW.db.qs(sql, ...)
-  if not QuerySql then return {} end
-  local query = FW.fmt(sql, ...)
-  local ok, rows = pcall(QuerySql, query)
-  if not ok or not rows then return {} end
-  return rows
-end
+local handle = nil
 
 function FW.db.init()
-  FW.db.x([[
-    CREATE TABLE IF NOT EXISTS fw_players (
-      steam_id TEXT PRIMARY KEY,
-      name TEXT,
-      purse INTEGER DEFAULT 500,
-      house_id TEXT DEFAULT '',
-      rank TEXT DEFAULT 'peasant',
-      lang TEXT DEFAULT 'ru'
-    );
-  ]])
-  FW.db.x([[
-    CREATE TABLE IF NOT EXISTS fw_houses (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      treasury INTEGER DEFAULT 1000,
-      prestige INTEGER DEFAULT 100
-    );
-  ]])
-  FW.db.x([[
-    CREATE TABLE IF NOT EXISTS fw_sites (
-      id TEXT PRIMARY KEY,
-      trade TEXT,
-      x REAL, y REAL, z REAL,
-      label TEXT
-    );
-  ]])
-  FW.log("database tables verified.")
+  if GetDatabase then
+    handle = GetDatabase()
+  end
+
+  if handle then
+    handle:ExecuteSync([[
+      CREATE TABLE IF NOT EXISTS fw_players (
+        steam_id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(64),
+        purse INT DEFAULT 500,
+        house_id VARCHAR(32) DEFAULT '',
+        rank VARCHAR(32) DEFAULT 'peasant',
+        lang VARCHAR(8) DEFAULT 'ru'
+      );
+    ]])
+    handle:ExecuteSync([[
+      CREATE TABLE IF NOT EXISTS fw_houses (
+        id VARCHAR(32) PRIMARY KEY,
+        name VARCHAR(64),
+        treasury INT DEFAULT 1000,
+        prestige INT DEFAULT 100
+      );
+    ]])
+    FW.log("database tables initialized.")
+  else
+    FW.log("running in memory-only mode (no database handle).")
+  end
+end
+
+function FW.db.execute(sql, params)
+  if handle then
+    handle:Execute(sql, params or {}, function() end)
+  end
+end
+
+function FW.db.query(sql, params, cb)
+  if handle then
+    handle:Query(sql, params or {}, cb)
+  else
+    if cb then cb({}) end
+  end
 end
 
 return FW.db

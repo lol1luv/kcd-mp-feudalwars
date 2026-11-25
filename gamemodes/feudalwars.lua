@@ -1,6 +1,5 @@
 -- ============================================================================
--- Feudal Wars v5 — Clean Architecture Entry Point
--- Kingdom Come: Deliverance Multiplayer (KCD:MP) Game Mode
+-- Feudal Wars v5 — Clean Architecture Entry Point (KCD:MP Engine)
 -- ============================================================================
 
 local FW = require("feudalwars.core")
@@ -10,13 +9,13 @@ FW.player = require("feudalwars.player")
 FW.house = require("feudalwars.house")
 FW.economy = require("feudalwars.economy")
 FW.npc = require("feudalwars.npc")
-FW.ui = require("feudalwars.ui")
 FW.bridge = require("feudalwars.bridge")
+FW.ui = require("feudalwars.ui")
 
 SetGameModeText("feudalwars v5")
 
 function OnGameModeInit()
-  FW.log("Booting Feudal Wars v5 (Clean Architecture Engine)...")
+  FW.log("Booting Feudal Wars v5 Engine...")
   FW.db.init()
   FW.house.init()
   FW.economy.init()
@@ -25,7 +24,7 @@ function OnGameModeInit()
 
   SetSpawnPointMode(1)
   AddSpawnPoint(FW.config.spawn.x, FW.config.spawn.y, FW.config.spawn.z, FW.config.spawn.yaw, "town")
-  FW.log("Feudal realm v5 initialized successfully.")
+  FW.log("Realm initialized successfully.")
 end
 
 function OnPlayerConnect(pid)
@@ -46,12 +45,23 @@ function OnPlayerDisconnect(pid, reason)
   FW.player.unload(pid)
 end
 
-function OnPlayerHit(pid, hit)
+function OnPlayerKeyBinding(pid, name, pressed)
+  if not pressed then return end
+  if name == "fw.menu" then
+    FW.ui.open_menu(pid)
+  end
+end
+
+function OnPlayerHitScenery(pid, hit)
   if hit then
     FW.economy.on_hit(pid, hit)
   end
 end
 
-function OnWebMessage(pid, frame, event, json_data)
-  FW.bridge.handle(pid, frame, event, json_data)
+function OnPlayerInteractActor(pid, actor_id)
+  FW.npc.interact(pid, actor_id)
+end
+
+function OnClientEvent(pid, name, payload, source)
+  FW.bridge.handle(pid, name, payload, source)
 end

@@ -1,5 +1,5 @@
 -- ============================================================================
--- Feudal Wars v5 — Realm Configuration
+-- Feudal Wars v5 — Configuration & Level Presets
 -- ============================================================================
 
 local FW = require("feudalwars.core")

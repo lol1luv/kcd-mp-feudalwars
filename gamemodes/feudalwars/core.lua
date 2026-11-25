@@ -1,5 +1,5 @@
 -- ============================================================================
--- Feudal Wars v5 — Core Engine & Helpers
+-- Feudal Wars v5 — Core Engine & Shared State
 -- ============================================================================
 
 local FW = {}
@@ -10,7 +10,7 @@ FW.state = {
   houses = {},
   sites = {},
   work_cd = {},
-  animals = {},
+  npcs = {},
   auctions = {}
 }
 
