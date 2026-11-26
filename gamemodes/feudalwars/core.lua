@@ -60,9 +60,9 @@ function FW.t(pid_or_lang, key)
 end
 
 function FW.ground(x, y, fallback_z)
-  if GetGroundZ then
-    local gz = GetGroundZ(x, y)
-    if gz and gz > -500 and gz < 2000 then return gz end
+  if GetGroundZ and fallback_z then
+    local ok, gz = pcall(GetGroundZ, x, y, fallback_z + 5.0)
+    if ok and gz and gz > -500 and gz < 2000 then return gz end
   end
   return fallback_z or 0
 end

@@ -1,26 +1,64 @@
-[menu]
-file = "menu/index.html"
+api = 1
+name = "FeudalWars"
+version = "5"
 
-[hall]
-file = "hall/index.html"
+[frames.menu]
+page = "menu/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["menu.*"]
 
-[me]
-file = "me/index.html"
+[frames.hall]
+page = "hall/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["hall.*"]
 
-[craft]
-file = "craft/index.html"
+[frames.me]
+page = "me/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["me.*"]
 
-[auction]
-file = "auction/index.html"
+[frames.craft]
+page = "craft/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["craft.*"]
 
-[build]
-file = "build/index.html"
+[frames.auction]
+page = "auction/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["auction.*"]
 
-[npc]
-file = "npc/index.html"
+[frames.build]
+page = "build/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["build.*"]
 
-[admin]
-file = "admin/index.html"
+[frames.npc]
+page = "npc/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["npc.*"]
 
-[notice]
-file = "notice/index.html"
+[frames.admin]
+page = "admin/index.html"
+preload = true
+z = 310
+focus = "input"
+events_out = ["admin.*"]
+
+[frames.notice]
+page = "notice/index.html"
+preload = true
+z = 200
